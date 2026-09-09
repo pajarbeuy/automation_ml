@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+.pytest_cache/
+*.egg
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Storage
+storage/
+*.pkl
+
+# Environment
+.env
+*.env
+
+# Docker
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
