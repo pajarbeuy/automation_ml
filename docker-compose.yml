@@ -1,62 +1,63 @@
-version: "3.9"
-
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: automl_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: automl
-      POSTGRES_PASSWORD: automl_secret
-      POSTGRES_DB: automl_db
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U automl -d automl_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
+  # ---------------------------------------------------------------------------
+  # 1. FastAPI Backend API + ML Engine Core
+  # ---------------------------------------------------------------------------
   api:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
-    container_name: automl_api
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: ml_autonomus_api
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql+psycopg2://automl:automl_secret@postgres:5432/automl_db
-      STORAGE_PATH: /app/storage
-      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000"
-    volumes:
-      - ./apps/api:/app
-      - ./packages:/app/packages
-      - storage_data:/app/storage
     ports:
       - "8000:8000"
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./apps/api/storage:/app/apps/api/storage
+      - ./apps/api/automl.db:/app/apps/api/automl.db
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_ALLOW_FILE_STORE=true
+      - STORAGE_PATH=/app/apps/api/storage
+    depends_on:
+      - mlflow
+    networks:
+      - ml_network
 
+  # ---------------------------------------------------------------------------
+  # 2. React Frontend Dashboard + Nginx Reverse Proxy
+  # ---------------------------------------------------------------------------
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
-    container_name: automl_web
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: ml_autonomus_web
     restart: unless-stopped
+    ports:
+      - "3000:80"
     depends_on:
       - api
-    environment:
-      VITE_API_BASE_URL: http://localhost:8000
-    volumes:
-      - ./apps/web:/app
-      - /app/node_modules
-    ports:
-      - "5173:5173"
-    command: npm run dev -- --host 0.0.0.0
+    networks:
+      - ml_network
 
-volumes:
-  postgres_data:
-  storage_data:
+  # ---------------------------------------------------------------------------
+  # 3. MLflow Tracking & Model Registry Server
+  # ---------------------------------------------------------------------------
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.16.0
+    container_name: ml_autonomus_mlflow
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./apps/api/storage/mlruns:/mlflow/mlruns
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:////mlflow/mlruns/mlflow.db
+      --default-artifact-root /mlflow/mlruns
+      --host 0.0.0.0
+      --port 5000
+    networks:
+      - ml_network
+
+networks:
+  ml_network:
+    driver: bridge

@@ -142,6 +142,7 @@ class ExperimentCreate(BaseModel):
     test_size: float = 0.2
     enable_feature_engineering: bool = False
     is_tuned: bool = False
+    model_params: dict[str, Any] | None = None
 
 
 class MetricOut(BaseModel):

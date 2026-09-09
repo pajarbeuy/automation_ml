@@ -25,6 +25,12 @@ def _fmt_pct(v: float | None) -> str:
     return f"{v * 100:.2f}%"
 
 
+def _fmt_float(v: float | None, decimals: int = 4) -> str:
+    if v is None:
+        return "—"
+    return f"{v:.{decimals}f}"
+
+
 def _status_badge(status: str) -> str:
     color = {"completed": "#10b981", "failed": "#ef4444", "running": "#f59e0b"}.get(status, "#6b7280")
     return f'<span style="background:{color};color:#fff;padding:2px 8px;border-radius:12px;font-size:0.75rem;">{status}</span>'
@@ -59,7 +65,7 @@ def _build_decisions_table(decisions: list[dict]) -> str:
     </table>"""
 
 
-def _build_experiments_table(experiments: list[dict]) -> str:
+def _build_experiments_table(experiments: list[dict], is_regression: bool = False) -> str:
     if not experiments:
         return "<p style='color:#6b7280'>No experiments recorded.</p>"
 
@@ -70,35 +76,66 @@ def _build_experiments_table(experiments: list[dict]) -> str:
         return None
 
     rows = ""
-    for exp in experiments:
-        f1 = _get_metric(exp, "f1_mean")
-        acc = _get_metric(exp, "accuracy_mean")
-        auc = _get_metric(exp, "roc_auc_mean")
-        t = exp.get("training_time_seconds")
-        rows += f"""
-        <tr>
-          <td>{_status_badge(exp.get('status',''))}</td>
-          <td style="font-weight:600">{exp.get('model_name','')}</td>
-          <td style="font-family:monospace">{_fmt_pct(f1)}</td>
-          <td style="font-family:monospace">{_fmt_pct(acc)}</td>
-          <td style="font-family:monospace">{_fmt_pct(auc)}</td>
-          <td style="color:#6b7280">{f"{t:.1f}s" if t else "—"}</td>
-        </tr>"""
+    if is_regression:
+        for exp in experiments:
+            r2 = _get_metric(exp, "r2_mean")
+            rmse = _get_metric(exp, "rmse_mean")
+            mae = _get_metric(exp, "mae_mean")
+            t = exp.get("training_time_seconds")
+            rows += f"""
+            <tr>
+              <td>{_status_badge(exp.get('status',''))}</td>
+              <td style="font-weight:600">{exp.get('model_name','')}</td>
+              <td style="font-family:monospace">{_fmt_float(r2)}</td>
+              <td style="font-family:monospace">{_fmt_float(rmse)}</td>
+              <td style="font-family:monospace">{_fmt_float(mae)}</td>
+              <td style="color:#6b7280">{f"{t:.1f}s" if t else "—"}</td>
+            </tr>"""
 
-    return f"""
-    <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
-      <thead>
-        <tr style="background:#1e1e2e;color:#a6adc8">
-          <th style="text-align:left;padding:8px">Status</th>
-          <th style="text-align:left;padding:8px">Model</th>
-          <th style="text-align:left;padding:8px">F1 (CV)</th>
-          <th style="text-align:left;padding:8px">Accuracy</th>
-          <th style="text-align:left;padding:8px">ROC-AUC</th>
-          <th style="text-align:left;padding:8px">Train Time</th>
-        </tr>
-      </thead>
-      <tbody>{rows}</tbody>
-    </table>"""
+        return f"""
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+          <thead>
+            <tr style="background:#1e1e2e;color:#a6adc8">
+              <th style="text-align:left;padding:8px">Status</th>
+              <th style="text-align:left;padding:8px">Model</th>
+              <th style="text-align:left;padding:8px">R² (CV)</th>
+              <th style="text-align:left;padding:8px">RMSE</th>
+              <th style="text-align:left;padding:8px">MAE</th>
+              <th style="text-align:left;padding:8px">Train Time</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+    else:
+        for exp in experiments:
+            f1 = _get_metric(exp, "f1_mean")
+            acc = _get_metric(exp, "accuracy_mean")
+            auc = _get_metric(exp, "roc_auc_mean")
+            t = exp.get("training_time_seconds")
+            rows += f"""
+            <tr>
+              <td>{_status_badge(exp.get('status',''))}</td>
+              <td style="font-weight:600">{exp.get('model_name','')}</td>
+              <td style="font-family:monospace">{_fmt_pct(f1)}</td>
+              <td style="font-family:monospace">{_fmt_pct(acc)}</td>
+              <td style="font-family:monospace">{_fmt_pct(auc)}</td>
+              <td style="color:#6b7280">{f"{t:.1f}s" if t else "—"}</td>
+            </tr>"""
+
+        return f"""
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+          <thead>
+            <tr style="background:#1e1e2e;color:#a6adc8">
+              <th style="text-align:left;padding:8px">Status</th>
+              <th style="text-align:left;padding:8px">Model</th>
+              <th style="text-align:left;padding:8px">F1 (CV)</th>
+              <th style="text-align:left;padding:8px">Accuracy</th>
+              <th style="text-align:left;padding:8px">ROC-AUC</th>
+              <th style="text-align:left;padding:8px">Train Time</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>"""
 
 
 def _build_confusion_matrix(cm: list[list[int]] | None) -> str:
@@ -182,6 +219,8 @@ def generate_html_report(
     candidate_experiment: dict | None,
     confusion_matrix: list[list[int]] | None = None,
     generated_at: str = "",
+    task_type: str | None = None,
+    residuals_summary: dict[str, float] | None = None,
 ) -> str:
     """
     Generate a self-contained HTML report for the project.
@@ -194,33 +233,86 @@ def generate_html_report(
                 return m.get("value")
         return None
 
+    if task_type is None:
+        has_reg_metric = any(
+            any(m.get("name") in ("r2_mean", "rmse_mean") for m in exp.get("metrics", []))
+            for exp in experiments
+        )
+        if not has_reg_metric and candidate_experiment:
+            has_reg_metric = any(
+                m.get("name") in ("r2_mean", "rmse_mean") for m in candidate_experiment.get("metrics", [])
+            )
+        is_regression = has_reg_metric
+    else:
+        is_regression = (task_type == "regression")
+
     candidate_section = ""
     if candidate_experiment:
-        f1 = _metric(candidate_experiment, "f1_mean")
-        acc = _metric(candidate_experiment, "accuracy_mean")
-        auc = _metric(candidate_experiment, "roc_auc_mean")
-        prec = _metric(candidate_experiment, "precision_mean")
-        rec = _metric(candidate_experiment, "recall_mean")
         t = candidate_experiment.get("training_time_seconds")
+        if is_regression:
+            r2 = _metric(candidate_experiment, "r2_mean")
+            rmse = _metric(candidate_experiment, "rmse_mean")
+            mae = _metric(candidate_experiment, "mae_mean")
+            mse = _metric(candidate_experiment, "mse_mean")
 
-        cm_html = _build_confusion_matrix(confusion_matrix)
-        candidate_section = f"""
-        <section class="section">
-          <h2>🏆 Selected Candidate Model</h2>
-          <div style="background:#1e1b4b;border:1px solid rgba(99,102,241,0.4);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem">
-            <div style="font-size:1.4rem;font-weight:700;margin-bottom:0.5rem">{candidate_experiment.get('model_name','')}</div>
-            <div style="color:#a6adc8;font-size:0.8rem">Training time: {f"{t:.1f}s" if t else "—"} &middot; Seed: {candidate_experiment.get('random_seed','')}</div>
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem">
-            <div class="metric-card"><div class="metric-label">F1 Score (CV)</div><div class="metric-val">{_fmt_pct(f1)}</div></div>
-            <div class="metric-card"><div class="metric-label">Accuracy</div><div class="metric-val">{_fmt_pct(acc)}</div></div>
-            <div class="metric-card"><div class="metric-label">Precision</div><div class="metric-val">{_fmt_pct(prec)}</div></div>
-            <div class="metric-card"><div class="metric-label">Recall</div><div class="metric-val">{_fmt_pct(rec)}</div></div>
-            {"" if auc is None else f'<div class="metric-card"><div class="metric-label">ROC-AUC</div><div class="metric-val">{_fmt_pct(auc)}</div></div>'}
-          </div>
-          <h3>Confusion Matrix</h3>
-          <div style="overflow-x:auto">{cm_html}</div>
-        </section>"""
+            if residuals_summary:
+                res_rows = "".join(
+                    f"<tr><td style='padding:6px 12px;font-weight:600;border-bottom:1px solid #313244'>{k}</td>"
+                    f"<td style='padding:6px 12px;font-family:monospace;border-bottom:1px solid #313244'>{v:.4f}</td></tr>"
+                    for k, v in residuals_summary.items()
+                )
+                diag_html = f"""
+                <h3>Residuals & Error Summary</h3>
+                <table style="border-collapse:collapse;margin:0.5rem 0;font-size:0.85rem">
+                  <tbody>{res_rows}</tbody>
+                </table>"""
+            else:
+                diag_html = """
+                <h3>Regression Evaluation Summary</h3>
+                <p style='color:#a6adc8;font-size:0.85rem'>
+                  Continuous target evaluated using cross-validated R², Root Mean Squared Error (RMSE), and Mean Absolute Error (MAE).
+                </p>"""
+
+            candidate_section = f"""
+            <section class="section">
+              <h2>🏆 Selected Candidate Model</h2>
+              <div style="background:#1e1b4b;border:1px solid rgba(99,102,241,0.4);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem">
+                <div style="font-size:1.4rem;font-weight:700;margin-bottom:0.5rem">{candidate_experiment.get('model_name','')}</div>
+                <div style="color:#a6adc8;font-size:0.8rem">Training time: {f"{t:.1f}s" if t else "—"} &middot; Seed: {candidate_experiment.get('random_seed','')}</div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem">
+                <div class="metric-card"><div class="metric-label">R² Score (CV)</div><div class="metric-val">{_fmt_float(r2)}</div></div>
+                <div class="metric-card"><div class="metric-label">RMSE</div><div class="metric-val">{_fmt_float(rmse)}</div></div>
+                <div class="metric-card"><div class="metric-label">MAE</div><div class="metric-val">{_fmt_float(mae)}</div></div>
+                {"" if mse is None else f'<div class="metric-card"><div class="metric-label">MSE</div><div class="metric-val">{_fmt_float(mse)}</div></div>'}
+              </div>
+              {diag_html}
+            </section>"""
+        else:
+            f1 = _metric(candidate_experiment, "f1_mean")
+            acc = _metric(candidate_experiment, "accuracy_mean")
+            auc = _metric(candidate_experiment, "roc_auc_mean")
+            prec = _metric(candidate_experiment, "precision_mean")
+            rec = _metric(candidate_experiment, "recall_mean")
+
+            cm_html = _build_confusion_matrix(confusion_matrix)
+            candidate_section = f"""
+            <section class="section">
+              <h2>🏆 Selected Candidate Model</h2>
+              <div style="background:#1e1b4b;border:1px solid rgba(99,102,241,0.4);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem">
+                <div style="font-size:1.4rem;font-weight:700;margin-bottom:0.5rem">{candidate_experiment.get('model_name','')}</div>
+                <div style="color:#a6adc8;font-size:0.8rem">Training time: {f"{t:.1f}s" if t else "—"} &middot; Seed: {candidate_experiment.get('random_seed','')}</div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem">
+                <div class="metric-card"><div class="metric-label">F1 Score (CV)</div><div class="metric-val">{_fmt_pct(f1)}</div></div>
+                <div class="metric-card"><div class="metric-label">Accuracy</div><div class="metric-val">{_fmt_pct(acc)}</div></div>
+                <div class="metric-card"><div class="metric-label">Precision</div><div class="metric-val">{_fmt_pct(prec)}</div></div>
+                <div class="metric-card"><div class="metric-label">Recall</div><div class="metric-val">{_fmt_pct(rec)}</div></div>
+                {"" if auc is None else f'<div class="metric-card"><div class="metric-label">ROC-AUC</div><div class="metric-val">{_fmt_pct(auc)}</div></div>'}
+              </div>
+              <h3>Confusion Matrix</h3>
+              <div style="overflow-x:auto">{cm_html}</div>
+            </section>"""
 
     profile_section = f"""
     <section class="section">
@@ -243,7 +335,7 @@ def generate_html_report(
     experiments_section = f"""
     <section class="section">
       <h2>🧪 Experiment Results</h2>
-      {_build_experiments_table(experiments)}
+      {_build_experiments_table(experiments, is_regression=is_regression)}
     </section>"""
 
     html = f"""<!DOCTYPE html>

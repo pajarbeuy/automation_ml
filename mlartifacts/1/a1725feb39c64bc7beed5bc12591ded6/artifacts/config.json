@@ -1,0 +1,126 @@
+{
+  "numeric_columns": [
+    "bedrooms",
+    "bathrooms",
+    "sqft_living",
+    "sqft_lot",
+    "floors",
+    "waterfront",
+    "view",
+    "condition",
+    "sqft_above",
+    "sqft_basement",
+    "yr_built",
+    "yr_renovated",
+    "price_per_sqft"
+  ],
+  "categorical_columns": [
+    "city",
+    "statezip"
+  ],
+  "dropped_columns": [
+    "street",
+    "date"
+  ],
+  "numeric_config": {
+    "bedrooms": {
+      "missing": "median_imputation",
+      "outlier": "winsorization",
+      "scaling": "standard_scaling"
+    },
+    "bathrooms": {
+      "missing": "median_imputation",
+      "outlier": "winsorization",
+      "scaling": "standard_scaling"
+    },
+    "sqft_living": {
+      "missing": "median_imputation",
+      "outlier": "robust_scaling",
+      "scaling": "standard_scaling"
+    },
+    "sqft_lot": {
+      "missing": "median_imputation",
+      "outlier": "robust_scaling",
+      "scaling": "robust_scaling"
+    },
+    "floors": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "standard_scaling"
+    },
+    "waterfront": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "standard_scaling"
+    },
+    "view": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "standard_scaling"
+    },
+    "condition": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "standard_scaling"
+    },
+    "sqft_above": {
+      "missing": "median_imputation",
+      "outlier": "winsorization",
+      "scaling": "standard_scaling"
+    },
+    "sqft_basement": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "standard_scaling"
+    },
+    "yr_built": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "standard_scaling"
+    },
+    "yr_renovated": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "standard_scaling"
+    },
+    "price_per_sqft": {
+      "missing": "median_imputation",
+      "outlier": "robust_scaling",
+      "scaling": "standard_scaling"
+    }
+  },
+  "categorical_config": {
+    "city": {
+      "missing": "most_frequent_imputation",
+      "encoding": "one_hot_encoding"
+    },
+    "statezip": {
+      "missing": "most_frequent_imputation",
+      "encoding": "frequency_encoding"
+    }
+  },
+  "enable_feature_engineering": true,
+  "model": {
+    "name": "RandomForestRegressor",
+    "params": {
+      "bootstrap": true,
+      "ccp_alpha": 0.0,
+      "criterion": "squared_error",
+      "max_depth": null,
+      "max_features": 1.0,
+      "max_leaf_nodes": null,
+      "max_samples": null,
+      "min_impurity_decrease": 0.0,
+      "min_samples_leaf": 1,
+      "min_samples_split": 2,
+      "min_weight_fraction_leaf": 0.0,
+      "monotonic_cst": null,
+      "n_estimators": 100,
+      "n_jobs": -1,
+      "oob_score": false,
+      "random_state": 42,
+      "verbose": 0,
+      "warm_start": false
+    }
+  }
+}

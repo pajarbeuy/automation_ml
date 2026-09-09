@@ -261,6 +261,11 @@ ml-autonomus/
 | AI Experiment Summary menampilkan F1 0.00% pada Regresi | `explainer.py` & `routers/assistant.py` | Tambahkan dukungan multi-task (ranking R² & RMSE pada Regresi) |
 | AI Summary di ExperimentsPage tidak update otomatis | `ExperimentsPage.tsx` | Tambahkan live polling reaktif & auto-refresh saat experiment selesai |
 | AIAssistantWidget melompati tahapan visualisasi EDA | `AIAssistantWidget.tsx` & `explainer.py` | Daftarkan rute `/eda` pada flow navigasi panduan |
+| Kolom Models di MLflow bernilai `-` (tidak terdaftar) | `routers/experiments.py` | Gunakan `mlflow.sklearn.log_model` alih-alih sekadar `log_artifact` |
+| Parameter tuning tidak diteruskan saat melatih model hasil tuning | `runner.py`, `schemas.py`, `experiments.py`, `ExperimentsPage.tsx` | Teruskan `model_params` dari `tuningResult` hingga ke `run_experiment` & `get_estimator` |
+| Skrip ekspor Python standalone gagal pada task Regresi & Feature Engineering | `export/code_generator.py` | Daftarkan model regressor, gunakan `KFold`, hilangkan `stratify=y`, dan sertakan class `AutoFeatureEngineer` |
+| Laporan HTML menampilkan metrik kosong & Confusion Matrix pada task Regresi | `export/report_generator.py` & `experiments.py` | Dukung tabel metrik regresi (R², RMSE, MAE) & ringkasan evaluasi residual |
+| RandomizedSearchCV berisiko hang di Windows | `experiments/tuner.py` | Set `n_jobs=1` untuk menghindari deadlock multiprocessing spawn Windows |
 
 ---
 
@@ -301,9 +306,9 @@ pytest tests/ -v
 
 ---
 
-*Terakhir diupdate: 2026-09-06*
-*Phase selesai: 0, 1, 2, 3, 4, 5, 6, 7 (Advanced AutoML: Regression, AutoFeatureEngineer, Hyperparameter Optimization, XGBoost/LightGBM Adapters)*
-*Fitur Tambahan Teruji:*
+*Terakhir diupdate: 2026-09-09*
+*Phase selesai: 0, 1, 2, 3, 4, 5, 6, 7, 8 (Production: Live Serving & Containerization)*
+*Fitur Tambahan Teruji (60 Pytest Tests 100% Passed):*
 - [x] Task Regresi & Metric Cards (`R²`, `MAE`, `MSE`, `RMSE`) + Actual vs Predicted Scatter Plot (`ResultPage.tsx`)
 - [x] Automated Feature Engineering (`AutoFeatureEngineer` log1p skewness & numeric interaction generator)
 - [x] Hyperparameter Optimization Engine (`tuner.py` + `POST /api/projects/{id}/experiments/tune` + UI Trials Modal)
@@ -312,4 +317,7 @@ pytest tests/ -v
 - [x] React Portal Modal Viewport Centering (`createPortal` ke `document.body` untuk seluruh modal UI agar selalu presisi di tengah layar tanpa perlu scroll)
 - [x] Alur & Penempatan Hyperparameter Tuning Kontekstual (`ExperimentsPage.tsx` - Tombol "Tune" pada setiap baris hasil eksperimen selesai, tombol "Tune Best Model" pada kartu model terbaik, serta tombol "Run & Register Tuned Model" untuk langsung mengeksekusi & membandingkan akurasi model hasil tuning di tabel perbandingan)
 - [x] Penamaan MLflow Tracking Model hasil Hyperparameter Tuning (`mlflow_tracker.py` & `experiments.py` - Penambahan akhiran `_tune` seperti `linear_regression_tune`, `random_forest_tune` pada MLflow run_name & registered_model_name, serta badge "Tuned" di UI)
+- [x] Model Serving & Live Prediction API (`inference.py` & `routers/serving.py` - Menerima raw JSON input tanpa perlu scaling/encoding manual, mendukung Single Prediction & Batch CSV Prediction)
+- [x] Live Inference Playground UI (`ResultPage.tsx` - Form input dinamis berdasarkan skema fitur, output klasifikasi dengan confidence / regresi dengan nilai kontinu, upload batch CSV, dan generator snippet cURL / Python)
+- [x] WSL Docker Containerization (`apps/api/Dockerfile`, `apps/web/Dockerfile`, `apps/web/nginx.conf`, `docker-compose.yml`, `.dockerignore`)
 

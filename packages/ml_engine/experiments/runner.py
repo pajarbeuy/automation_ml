@@ -102,13 +102,14 @@ def run_experiment(
     primary_metric: str = "f1",
     enable_feature_engineering: bool = False,
     task_type: str = "classification",
+    model_params: dict[str, Any] | None = None,
 ) -> ExperimentRecord:
     """
     Menjalankan 1 eksperimen pelatihan model Machine Learning dari awal hingga selesai.
 
     Tahapan:
         1. Memuat CSV dataset.
-        2. Membangun Pipeline Scikit-Learn dari keputusan preprocessing.
+        2. Membangun Pipeline Scikit-Learn dari keputusan preprocessing & hyperparameter tuning.
         3. Menjalankan N-Fold Cross Validation.
         4. Menyimpan file artifak (konfigurasi, metrik, model pickle).
         5. Mengirimkan catatan eksperimen ke MLflow Tracking Server.
@@ -139,13 +140,17 @@ def run_experiment(
     # TAHAP 2: Membangun Pipeline Preprocessing & Estimator Model
     # -------------------------------------------------------------------------
     try:
-        estimator = get_estimator(model_name, random_seed=random_seed, task_type=task_type)
+        overrides = dict(model_params) if model_params else {}
+        estimator = get_estimator(model_name, random_seed=random_seed, task_type=task_type, **overrides)
         pipeline, cfg = build_pipeline(
             decisions,
             profile_features,
             estimator,
             enable_feature_engineering=enable_feature_engineering,
         )
+        if model_params:
+            cfg["is_tuned"] = True
+            cfg["model_params"] = model_params
         cfg_hash = config_hash(cfg)
     except Exception as exc:
         return _failed_record(

@@ -182,6 +182,7 @@ export interface ExperimentCreate {
   test_size?: number;
   enable_feature_engineering?: boolean;
   is_tuned?: boolean;
+  model_params?: Record<string, any>;
 }
 
 export interface ScalingStats {
@@ -217,5 +218,40 @@ export interface TuningResultData {
   primary_metric: string;
   trials: TuningTrial[];
   total_time_seconds: number;
+}
+
+// ─── Model Serving & Prediction Types ─────────────────────────
+export interface FeatureSchema {
+  name: string;
+  dtype: 'numeric' | 'categorical';
+  example_value: any;
+  min?: number | null;
+  max?: number | null;
+  mean?: number | null;
+  categories?: string[];
+}
+
+export interface CandidateSchemaResponse {
+  project_id: string;
+  candidate_experiment_id: string;
+  model_name: string;
+  task_type: string;
+  target_column: string;
+  features: FeatureSchema[];
+}
+
+export interface PredictionResult {
+  prediction: string | number;
+  confidence?: number;
+  probabilities?: Record<string, number>;
+}
+
+export interface PredictResponse {
+  result?: PredictionResult;
+  results?: PredictionResult[];
+  count?: number;
+  model_name: string;
+  task_type: string;
+  target_column: string;
 }
 

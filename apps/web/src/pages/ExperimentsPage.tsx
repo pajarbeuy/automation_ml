@@ -191,6 +191,7 @@ export function ExperimentsPage() {
         primary_metric: primaryMetric.replace('_mean', ''),
         enable_feature_engineering: enableFe,
         is_tuned: true,
+        model_params: tuningResult?.best_params,
       });
       setExperiments(prev => [...newExps, ...prev]);
     } catch (err: unknown) {
