@@ -1,0 +1,48 @@
+{
+  "numeric_columns": [
+    "age",
+    "income"
+  ],
+  "categorical_columns": [
+    "sex"
+  ],
+  "dropped_columns": [],
+  "numeric_config": {
+    "age": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "standard_scaling"
+    },
+    "income": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "robust_scaling"
+    }
+  },
+  "categorical_config": {
+    "sex": {
+      "missing": "most_frequent_imputation",
+      "encoding": "one_hot_encoding"
+    }
+  },
+  "enable_feature_engineering": false,
+  "model": {
+    "name": "LogisticRegression",
+    "params": {
+      "C": 1.0,
+      "class_weight": null,
+      "dual": false,
+      "fit_intercept": true,
+      "intercept_scaling": 1,
+      "l1_ratio": 0.0,
+      "max_iter": 1000,
+      "n_jobs": null,
+      "penalty": "deprecated",
+      "random_state": 42,
+      "solver": "lbfgs",
+      "tol": 0.0001,
+      "verbose": 0,
+      "warm_start": false
+    }
+  }
+}

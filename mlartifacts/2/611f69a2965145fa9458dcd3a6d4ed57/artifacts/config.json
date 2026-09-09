@@ -1,0 +1,50 @@
+{
+  "numeric_columns": [
+    "petal_length",
+    "petal_width",
+    "sepal_length",
+    "sepal_width"
+  ],
+  "categorical_columns": [],
+  "dropped_columns": [],
+  "numeric_config": {
+    "petal_length": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "standard_scaling"
+    },
+    "petal_width": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "standard_scaling"
+    },
+    "sepal_length": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "standard_scaling"
+    },
+    "sepal_width": {
+      "missing": "median_imputation",
+      "outlier": "winsorization",
+      "scaling": "standard_scaling"
+    }
+  },
+  "categorical_config": {},
+  "model": {
+    "name": "LinearSVC",
+    "params": {
+      "C": 1.0,
+      "class_weight": null,
+      "dual": "auto",
+      "fit_intercept": true,
+      "intercept_scaling": 1,
+      "loss": "squared_hinge",
+      "max_iter": 2000,
+      "multi_class": "ovr",
+      "penalty": "l2",
+      "random_state": 42,
+      "tol": 0.0001,
+      "verbose": 0
+    }
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "summary": {
+    "accuracy_mean": 0.950494,
+    "accuracy_std": 0.009637,
+    "precision_mean": 0.946356,
+    "precision_std": 0.05447,
+    "recall_mean": 0.700999,
+    "recall_std": 0.027732,
+    "f1_mean": 0.805051,
+    "f1_std": 0.0353,
+    "roc_auc_mean": 0.912297,
+    "roc_auc_std": 0.011687,
+    "pr_auc_mean": 0.862752,
+    "pr_auc_std": 0.021233
+  },
+  "fold_results": [
+    {
+      "fold": 1,
+      "metrics": {
+        "accuracy": 0.932584,
+        "precision": 0.83871,
+        "recall": 0.666667,
+        "f1": 0.742857,
+        "roc_auc": 0.898111,
+        "pr_auc": 0.822955
+      },
+      "train_size": 2132,
+      "val_size": 534,
+      "duration_seconds": 0.671
+    },
+    {
+      "fold": 2,
+      "metrics": {
+        "accuracy": 0.949343,
+        "precision": 0.962963,
+        "recall": 0.675325,
+        "f1": 0.793893,
+        "roc_auc": 0.916852,
+        "pr_auc": 0.87233
+      },
+      "train_size": 2133,
+      "val_size": 533,
+      "duration_seconds": 0.714
+    },
+    {
+      "fold": 3,
+      "metrics": {
+        "accuracy": 0.954972,
+        "precision": 0.964912,
+        "recall": 0.714286,
+        "f1": 0.820896,
+        "roc_auc": 0.907439,
+        "pr_auc": 0.872839
+      },
+      "train_size": 2133,
+      "val_size": 533,
+      "duration_seconds": 0.681
+    },
+    {
+      "fold": 4,
+      "metrics": {
+        "accuracy": 0.9606,
+        "precision": 0.983051,
+        "recall": 0.74359,
+        "f1": 0.846715,
+        "roc_auc": 0.90665,
+        "pr_auc": 0.861108
+      },
+      "train_size": 2133,
+      "val_size": 533,
+      "duration_seconds": 0.673
+    },
+    {
+      "fold": 5,
+      "metrics": {
+        "accuracy": 0.954972,
+        "precision": 0.982143,
+        "recall": 0.705128,
+        "f1": 0.820896,
+        "roc_auc": 0.932432,
+        "pr_auc": 0.884527
+      },
+      "train_size": 2133,
+      "val_size": 533,
+      "duration_seconds": 0.739
+    }
+  ],
+  "confusion_matrix": [
+    [
+      2262,
+      16
+    ],
+    [
+      116,
+      272
+    ]
+  ]
+}

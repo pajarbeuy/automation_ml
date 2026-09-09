@@ -1,0 +1,70 @@
+{
+  "summary": {
+    "accuracy_mean": 0.530006,
+    "accuracy_std": 0.012378,
+    "precision_mean": 0.530006,
+    "precision_std": 0.012378,
+    "recall_mean": 1.0,
+    "recall_std": 0.0,
+    "f1_mean": 0.69273,
+    "f1_std": 0.01057,
+    "roc_auc_mean": 0.5,
+    "roc_auc_std": 0.0,
+    "pr_auc_mean": 0.530006,
+    "pr_auc_std": 0.012378
+  },
+  "fold_results": [
+    {
+      "fold": 1,
+      "metrics": {
+        "accuracy": 0.529412,
+        "precision": 0.529412,
+        "recall": 1.0,
+        "f1": 0.692308,
+        "roc_auc": 0.5,
+        "pr_auc": 0.529412
+      },
+      "train_size": 66,
+      "val_size": 34,
+      "duration_seconds": 0.123
+    },
+    {
+      "fold": 2,
+      "metrics": {
+        "accuracy": 0.545455,
+        "precision": 0.545455,
+        "recall": 1.0,
+        "f1": 0.705882,
+        "roc_auc": 0.5,
+        "pr_auc": 0.545455
+      },
+      "train_size": 67,
+      "val_size": 33,
+      "duration_seconds": 0.124
+    },
+    {
+      "fold": 3,
+      "metrics": {
+        "accuracy": 0.515152,
+        "precision": 0.515152,
+        "recall": 1.0,
+        "f1": 0.68,
+        "roc_auc": 0.5,
+        "pr_auc": 0.515152
+      },
+      "train_size": 67,
+      "val_size": 33,
+      "duration_seconds": 0.134
+    }
+  ],
+  "confusion_matrix": [
+    [
+      0,
+      47
+    ],
+    [
+      0,
+      53
+    ]
+  ]
+}

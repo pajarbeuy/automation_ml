@@ -1,0 +1,98 @@
+{
+  "summary": {
+    "accuracy_mean": 0.953333,
+    "accuracy_std": 0.045216,
+    "precision_mean": 0.954882,
+    "precision_std": 0.044291,
+    "recall_mean": 0.953333,
+    "recall_std": 0.045216,
+    "f1_mean": 0.953216,
+    "f1_std": 0.045329,
+    "roc_auc_mean": 0.996333,
+    "roc_auc_std": 0.003399
+  },
+  "fold_results": [
+    {
+      "fold": 1,
+      "metrics": {
+        "accuracy": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "roc_auc": 1.0
+      },
+      "train_size": 120,
+      "val_size": 30,
+      "duration_seconds": 0.055
+    },
+    {
+      "fold": 2,
+      "metrics": {
+        "accuracy": 0.966667,
+        "precision": 0.969697,
+        "recall": 0.966667,
+        "f1": 0.966583,
+        "roc_auc": 0.996667
+      },
+      "train_size": 120,
+      "val_size": 30,
+      "duration_seconds": 0.047
+    },
+    {
+      "fold": 3,
+      "metrics": {
+        "accuracy": 0.9,
+        "precision": 0.902357,
+        "recall": 0.9,
+        "f1": 0.899749,
+        "roc_auc": 0.991667
+      },
+      "train_size": 120,
+      "val_size": 30,
+      "duration_seconds": 0.044
+    },
+    {
+      "fold": 4,
+      "metrics": {
+        "accuracy": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "roc_auc": 1.0
+      },
+      "train_size": 120,
+      "val_size": 30,
+      "duration_seconds": 0.045
+    },
+    {
+      "fold": 5,
+      "metrics": {
+        "accuracy": 0.9,
+        "precision": 0.902357,
+        "recall": 0.9,
+        "f1": 0.899749,
+        "roc_auc": 0.993333
+      },
+      "train_size": 120,
+      "val_size": 30,
+      "duration_seconds": 0.049
+    }
+  ],
+  "confusion_matrix": [
+    [
+      50,
+      0,
+      0
+    ],
+    [
+      0,
+      47,
+      3
+    ],
+    [
+      0,
+      4,
+      46
+    ]
+  ]
+}

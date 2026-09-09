@@ -1,0 +1,36 @@
+{
+  "numeric_columns": [
+    "age",
+    "income"
+  ],
+  "categorical_columns": [
+    "sex"
+  ],
+  "dropped_columns": [],
+  "numeric_config": {
+    "age": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "standard_scaling"
+    },
+    "income": {
+      "missing": "median_imputation",
+      "outlier": "leave_unchanged",
+      "scaling": "robust_scaling"
+    }
+  },
+  "categorical_config": {
+    "sex": {
+      "missing": "most_frequent_imputation",
+      "encoding": "one_hot_encoding"
+    }
+  },
+  "model": {
+    "name": "DummyClassifier",
+    "params": {
+      "constant": null,
+      "random_state": null,
+      "strategy": "most_frequent"
+    }
+  }
+}
