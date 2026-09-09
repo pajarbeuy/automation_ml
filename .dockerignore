@@ -1,0 +1,29 @@
+/* #Dependencies & environments */
+**/node_modules/
+**/.venv/
+**/venv/
+**/env/
+
+/* # Build artifacts */
+**/dist/
+**/build/
+**/*.egg-info/
+
+# Python cache & test files
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+**/.coverage
+
+/* # Git & IDE */
+**/.git/
+**/.github/
+**/.vscode/
+**/.idea/
+**/.gemini/
+
+/* # OS specific */
+Thumbs.db
+.DS_Store

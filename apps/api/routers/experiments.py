@@ -147,7 +147,14 @@ def run_experiments(
             id=experiment_id,
             project_id=project_id,
             dataset_id=dataset.id,
-            config_json={"model_name": model_name, "cv_folds": payload.cv_folds, "random_seed": payload.random_seed, "enable_feature_engineering": payload.enable_feature_engineering, "is_tuned": payload.is_tuned},
+            config_json={
+                "model_name": model_name,
+                "cv_folds": payload.cv_folds,
+                "random_seed": payload.random_seed,
+                "enable_feature_engineering": payload.enable_feature_engineering,
+                "is_tuned": payload.is_tuned,
+                "model_params": payload.model_params,
+            },
             model_name=model_name,
             random_seed=payload.random_seed,
             status="pending",
@@ -174,6 +181,7 @@ def run_experiments(
             primary_metric=payload.primary_metric,
             enable_feature_engineering=payload.enable_feature_engineering,
             task_type=task_type,
+            model_params=payload.model_params,
         )
 
     return created_experiments
@@ -198,6 +206,7 @@ def _run_and_persist(
     primary_metric: str,
     enable_feature_engineering: bool = False,
     task_type: str = "classification",
+    model_params: dict[str, Any] | None = None,
 ) -> None:
     """Fungsi pekerja latar belakang (Worker): Melatih 1 model dan menyimpan hasil ke SQLite & MLflow."""
     from database import SessionLocal
@@ -227,6 +236,7 @@ def _run_and_persist(
             primary_metric=primary_metric,
             enable_feature_engineering=enable_feature_engineering,
             task_type=task_type,
+            model_params=model_params,
         )
 
         # Update status & simpan metrik ke database
@@ -291,10 +301,16 @@ def _try_log_mlflow(
 ) -> None:
     """Mengirim hasil eksperimen ke MLflow secara aman tanpa menghentikan sistem jika error."""
     try:
+        import os
+        import pickle
         import mlflow
-        tracking_uri = settings.mlflow_tracking_uri
+        import mlflow.sklearn
+
+        tracking_uri = settings.mlflow_tracking_uri or os.getenv("MLFLOW_TRACKING_URI", "")
         if not tracking_uri:
             return
+
+        os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
 
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment(f"project_{project_id}")
@@ -313,9 +329,35 @@ def _try_log_mlflow(
                 **{f"cfg_{k}": str(v) for k, v in config.items() if not isinstance(v, dict)},
             })
             mlflow.log_metrics({k: v for k, v in metrics_flat.items() if isinstance(v, (int, float))})
+
+            # Daftarkan model pipeline (.pkl) ke MLflow Model Registry & kolom Models
             for art in artifacts:
                 p = Path(art.get("path", ""))
                 if p.exists():
+                    if art.get("type") == "pipeline" or str(p).endswith("pipeline.pkl"):
+                        try:
+                            with open(p, "rb") as f:
+                                pipeline_obj = pickle.load(f)
+
+                            clean_name = model_name_tag.replace(" ", "_").lower()
+                            reg_name = f"ml_autonomus_{clean_name}"
+                            try:
+                                mlflow.sklearn.log_model(
+                                    sk_model=pipeline_obj,
+                                    artifact_path="model",
+                                    registered_model_name=reg_name,
+                                    serialization_format="pickle",
+                                )
+                            except Exception:
+                                # Fallback jika store backend tidak mendukung model registry langsung
+                                mlflow.sklearn.log_model(
+                                    sk_model=pipeline_obj,
+                                    artifact_path="model",
+                                    serialization_format="pickle",
+                                )
+                        except Exception:
+                            pass
+                    # Log artifak mentah
                     mlflow.log_artifact(str(p))
     except Exception:
         pass
@@ -464,6 +506,7 @@ def export_python_code(experiment_id: str, db: Session = Depends(get_db)):
         experiment_id=experiment_id,
         dataset_filename=dataset.filename if dataset else "data.csv",
         target_column=project.target_column if project else "target",
+        task_type=project.task_type if project else None,
     )
 
     filename = f"pipeline_{exp.model_name}_{experiment_id[:8]}.py"
@@ -583,6 +626,7 @@ def download_report(project_id: str, db: Session = Depends(get_db)):
         candidate_experiment=candidate_dict,
         confusion_matrix=confusion_matrix,
         generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        task_type=project.task_type or "classification",
     )
 
     filename = f"automl_report_{project.name.replace(' ', '_')}_{project_id[:8]}.html"

@@ -71,13 +71,14 @@ The AI layer must consume structured evidence rather than inventing statistical 
 - [x] Regression Metrics (`R²`, `MAE`, `MSE`, `RMSE`) & Actual vs Predicted Scatter / Residual Plot UI
 - [x] Advanced Model Adapters (XGBoost & LightGBM)
 
-## Phase 8: Production
+## Phase 8: Production (In Progress)
 
-Potential:
-- async workers
-- object storage
-- authentication
-- multi-user projects
-- model registry
-- model serving
-- monitoring
+- [x] Model Serving & Live Prediction Engine (`POST /api/projects/{id}/predict` on raw JSON)
+- [x] Candidate Feature Schema Generator (`GET /api/projects/{id}/models/candidate/schema`)
+- [x] Live Prediction & Inference Playground UI in `ResultPage.tsx` (Single prediction, Batch CSV, API snippets)
+- [x] Containerization & Orchestration (`apps/api/Dockerfile`, `apps/web/Dockerfile`, `apps/web/nginx.conf`, `docker-compose.yml`)
+- [x] Model Registry Integration (`mlflow.sklearn.log_model`)
+- [ ] Async Workers (Redis / Celery)
+- [ ] Authentication & Multi-User Projects
+- [ ] Cloud Object Storage (S3 / MinIO)
+- [ ] Model Drift Monitoring

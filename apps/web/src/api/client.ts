@@ -10,6 +10,8 @@ import type {
   PipelineValidation,
   Experiment,
   ExperimentCreate,
+  CandidateSchemaResponse,
+  PredictResponse,
 } from '../types';
 
 const api = axios.create({
@@ -134,5 +136,21 @@ export const getExperimentSummary = (projectId: string) =>
 
 export const getNextStepGuidance = (projectId: string, currentPage = 'upload') =>
   api.get(`/api/projects/${projectId}/assistant/next-step`, { params: { current_page: currentPage } }).then(r => r.data);
+
+// ─── Model Serving & Live Prediction ───────────────────────────
+export const getCandidateSchema = (projectId: string) =>
+  api.get<CandidateSchemaResponse>(`/api/projects/${projectId}/models/candidate/schema`).then(r => r.data);
+
+export const predictSingle = (projectId: string, features: Record<string, any>) =>
+  api.post<PredictResponse>(`/api/projects/${projectId}/predict`, { features }).then(r => r.data);
+
+export const predictBatchCsv = (projectId: string, file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.post(`/api/projects/${projectId}/predict/batch-csv`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    responseType: 'blob',
+  }).then(r => r.data);
+};
 
 export default api;

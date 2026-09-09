@@ -2,37 +2,35 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# System deps
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps
-COPY pyproject.toml /app/pyproject.toml
-RUN pip install --no-cache-dir \
-    fastapi \
-    "uvicorn[standard]" \
-    pydantic \
-    pydantic-settings \
-    pandas \
-    numpy \
-    scipy \
-    scikit-learn \
-    matplotlib \
-    sqlalchemy \
-    alembic \
-    psycopg2-binary \
-    python-multipart \
-    aiofiles \
-    httpx
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/packages/ml_engine:/app/apps/api
 
-# Copy source
-COPY . /app
+# Copy configuration
+COPY pyproject.toml /app/
 
-# Add packages to PYTHONPATH
-ENV PYTHONPATH=/app:/app/packages/ml_engine
+# Copy packages and API source
+COPY packages/ /app/packages/
+COPY apps/api/ /app/apps/api/
+
+# Install dependencies including MLflow, XGBoost, LightGBM
+WORKDIR /app
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -e . && \
+    pip install --no-cache-dir xgboost lightgbm mlflow
+
+# Create storage directories
+RUN mkdir -p /app/apps/api/storage/datasets /app/apps/api/storage/artifacts
+
+WORKDIR /app/apps/api
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

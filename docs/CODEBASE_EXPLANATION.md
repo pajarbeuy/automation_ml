@@ -29,7 +29,8 @@ ml-autonomus/
 │       ├── experiments/          # Eksekutor runner eksperimen & penyimpan artefak
 │       ├── export/               # Generator kode Python (.py) & laporan ringkasan (.html)
 │       ├── tracking/             # Modul integrasi ke MLflow Tracking & Model Registry
-│       └── assistant/            # Engine narasi AI Assistant (Explainer & Next-Step guide)
+│       ├── assistant/            # Engine narasi AI Assistant (Explainer & Next-Step guide)
+│       └── serving/              # Engine live inference & model prediction
 ├── apps/
 │   ├── api/                      # 🔌 BACKEND API (FastAPI + SQLAlchemy)
 │   │   ├── main.py               # Entrypoint FastAPI server
@@ -37,14 +38,15 @@ ml-autonomus/
 │   │   ├── database.py           # Koneksi SQLite database
 │   │   ├── db_models/            # ORM Database Models (projects, datasets, experiments, dll)
 │   │   ├── schemas/              # Schema validasi Pydantic (Request/Response)
-│   │   └── routers/              # Endpoint REST API (projects, datasets, recommendations, dll)
+│   │   └── routers/              # Endpoint REST API (projects, datasets, recommendations, serving, dll)
 │   └── web/                      # 💻 FRONTEND DASHBOARD (React 18 + Vite + Tailwind v4)
 │       ├── src/
 │       │   ├── App.tsx           # Router navigasi utama
 │       │   ├── api/client.ts     # Helper panggilan API Backend (axios)
 │       │   ├── components/       # Komponen UI (Sidebar, AIAssistantWidget)
-│       │   └── pages/            # 7 Halaman Alur Kerja (Upload, EDA, Treatment, Pipeline, dll)
-├── tests/                        # 🧪 UNIT TESTS (56 test Pytest, 100% Passed)
+│       │   └── pages/            # 7 Halaman Alur Kerja (Upload, EDA, Treatment, Result/Serving, dll)
+├── tests/                        # 🧪 UNIT TESTS (60 test Pytest, 100% Passed)
+├── Dockerfile & docker-compose   # 🐳 Containerization Production Setup (WSL Docker)
 └── docs/                         # 📚 DOKUMENTASI LENGKAP
 ```
 
@@ -92,15 +94,15 @@ Modul ini adalah **otak utama machine learning**. Kode di dalam folder ini tidak
 - **Metrik & Output**: Menghitung metrik klasifikasi (Accuracy, F1, Precision, Recall, ROC-AUC) atau metrik regresi (`R²`, `MAE`, `MSE`, `RMSE`), serta mengekstrak data residual actual vs predicted.
 
 #### 7. `experiments/` (`runner.py`, `tuner.py`)
-- **`runner.py`**: Menjalankan eksperimen CV, menyimpan artefak (`pipeline.pkl`, `config.json`, `metrics.json`), dan merekam metadata environment (termasuk penanganan flag `is_tuned`).
-- **`tuner.py`**: Engine Hyperparameter Optimization (`RandomizedSearchCV` + KFold / Stratified CV) untuk menemukan hiperparameter terbaik per model yang dieksekusi.
+- **`runner.py`**: Menjalankan eksperimen CV, menyimpan artefak (`pipeline.pkl`, `config.json`, `metrics.json`), merekam metadata environment, serta menerapkan hiperparameter model hasil tuning (`model_params`) ke estimator pipeline.
+- **`tuner.py`**: Engine Hyperparameter Optimization (`RandomizedSearchCV` + KFold / Stratified CV) untuk mencari kombinasi parameter terbaik dengan konfigurasi `n_jobs=1` yang aman dari deadlock multiprocessing di Windows.
 
 #### 8. `tracking/mlflow_tracker.py`
-- **Fungsi Utama**: Otomatisasi pendaftaran metrik, parameter, dan model pipeline (`pipeline.pkl`) ke **MLflow Tracking Server** dan **MLflow Model Registry**. Untuk eksperimen/model hasil hyperparameter tuning, penamaan MLflow run name dan registered model name secara otomatis menyertakan akhiran `_tune` (misalnya `linear_regression_tune`, `random_forest_tune`).
+- **Fungsi Utama**: Otomatisasi pendaftaran metrik, parameter, dan model pipeline (`pipeline.pkl`) ke **MLflow Tracking Server** dan **MLflow Model Registry** via `mlflow.sklearn.log_model`. Untuk eksperimen/model hasil hyperparameter tuning, penamaan MLflow run name dan registered model name secara otomatis menyertakan akhiran `_tune` (misalnya `linear_regression_tune`, `random_forest_tune`).
 
 #### 9. `export/` (`code_generator.py`, `report_generator.py`)
-- **`code_generator.py`**: Mengubah konfigurasi eksperimen menjadi script Python (`.py`) mandiri yang dapat dijalankan di luar aplikasi.
-- **`report_generator.py`**: Menghasilkan dokumen HTML ringkasan laporan proyek lengkap dengan Confusion Matrix atau data regresi.
+- **`code_generator.py`**: Mengubah konfigurasi eksperimen menjadi script Python (`.py`) mandiri scikit-learn pipeline murni tanpa dependensi internal AutoML. Mendukung seluruh model Klasifikasi & Regresi, pembagian dataset terpisah (tanpa `stratify` dan menggunakan `KFold` pada regresi), pencetakan metrik $R^2$, RMSE, dan MAE, format konstruktor dengan hiperparameter hasil tuning (`model_params`), serta penyisipan definisi inline class `AutoFeatureEngineer` jika feature engineering diaktifkan.
+- **`report_generator.py`**: Menghasilkan dokumen HTML mandiri ringkasan seluruh workflow proyek, lengkap dengan Confusion Matrix (Klasifikasi) atau tabel metrik regresi ($R^2$, RMSE, MAE) dan ringkasan analisis error/residual (Regresi).
 
 #### 10. `assistant/` (`explainer.py`, `llm_provider.py`)
 - **`explainer.py` (Fungsi Utama)**: Engine *Natural Language Generation* (NLG) deterministik murni berbasis aturan sesuai keputusan **ADR-003**. Bekerja tanpa ketergantungan model/API pihak ketiga, menghasilkan penjelasan instan (<1ms) dan 100% akurat berbasis statistik nyata:
@@ -108,6 +110,11 @@ Modul ini adalah **otak utama machine learning**. Kode di dalam folder ini tidak
   - **Ringkasan Eksperimen Multi-Task**: Merangkum hasil evaluasi model secara kontekstual baik untuk Klasifikasi (perankingan F1-Score, Akurasi, ROC-AUC) maupun Regresi (perankingan $R^2$ Score, RMSE, dan MAE).
   - **Panduan Alur Kerja (`suggest_next_step`)**: Memandu pengguna langkah demi langkah dari Upload ➔ EDA ➔ Treatment ➔ Pipeline ➔ Experiments ➔ Result.
 - **`llm_provider.py`**: Adaptor opsional untuk *enrichment* naratif via model LLM eksternal (misal Gemini API) dengan mekanisme *graceful fallback* ke Rule-Based jika offline atau tanpa API key.
+
+#### 11. `serving/` (`inference.py`)
+- **Fungsi Utama**: Engine inferensi *real-time* yang memuat artefak `pipeline.pkl` dan mengeksekusi prediksi langsung pada data fitur mentah.
+- **Transparansi Preprocessing**: Klien tidak perlu melakukan scaling atau encoding manual; seluruh tahapan imputer, winsorizer, encoder, dan scaler dieksekusi secara otomatis di dalam pipeline.
+- **Multi-Format & Multi-Task**: Menerima single record dict, batch list of dicts, maupun pandas DataFrame. Menyajikan label kelas & *confidence score* untuk Klasifikasi serta nilai kontinu untuk Regresi.
 
 ---
 
@@ -124,8 +131,9 @@ Backend menggunakan **FastAPI** untuk menyediakan REST API yang dikonsumsi oleh 
    - `datasets.py`: Upload CSV, ambil profil data, chart EDA, & visualisasi scaling preview before vs after.
    - `recommendations.py`: Ambil rekomendasi & simpan keputusan user.
    - `pipelines.py`: Buat konfigurasi pipeline & jalankan validasi dry-run.
-   - `experiments.py`: Eksekusi training eksperimen klasifikasi & regresi, hyperparameter tuning (`POST /experiments/tune`), penanganan flag `is_tuned`, endpoint residual plot, ekspor kode `.py`, dan ekspor laporan `.html`.
-    - `assistant.py`: Endpoint penjelasan AI Assistant & panduan alur kerja yang meneruskan `task_type` (klasifikasi/regresi) untuk memastikan ketepatan ringkasan benchmark.
+   - `experiments.py`: Eksekusi training eksperimen klasifikasi & regresi, hyperparameter tuning (`POST /experiments/tune`), penanganan flag `is_tuned`, registrasi resmi model ke MLflow Model Registry via `mlflow.sklearn.log_model`, endpoint residual plot, ekspor kode `.py`, dan ekspor laporan `.html`.
+   - `assistant.py`: Endpoint penjelasan AI Assistant & panduan alur kerja yang meneruskan `task_type` (klasifikasi/regresi) untuk memastikan ketepatan ringkasan benchmark.
+   - `serving.py`: Endpoint produksi untuk inferensi live model kandidat (`GET /models/candidate/schema`, `POST /predict`, dan `POST /predict/batch-csv`).
 
 ---
 
@@ -139,7 +147,7 @@ Frontend dibangun menggunakan **React 18 + TypeScript + Vite + Tailwind CSS v4**
 4. **`pages/TreatmentPage.tsx`**: Halaman kartu keputusan preprocessing & preview visualizer histogram Before vs After Scaling. Menyediakan tombol *Ask AI* dengan parsing bukti statistik fleksibel (`=` dan `:`) agar modal penjelasan menyajikan angka nyata.
 5. **`pages/PipelinePage.tsx`**: Visualisasi DAG pipeline scikit-learn dan tombol uji validasi pipeline.
 6. **`pages/ExperimentsPage.tsx`**: Halaman seleksi algoritma model (Klasifikasi / Regresi), toggle Auto Feature Engineering, pengaturan CV Folds, tombol `Tune` kontekstual pada setiap baris hasil eksperimen selesai dan kartu *Best Model*, modal Hyperparameter Tuning dengan pencarian Randomized Search, tombol *Run & Register Tuned Model*, kartu ringkasan **AI Benchmark Summary**, serta mekanisme *live polling* reaktif setiap 2 detik yang otomatis meng-update tabel dan ringkasan AI seketika eksperimen selesai.
-7. **`pages/ResultPage.tsx`**: Halaman hasil akhir yang menampilkan statistik kandidat terpilih, Confusion Matrix (Klasifikasi) atau Scatter Plot Actual vs Predicted & Residuals (Regresi), dan tombol download (`.pkl`, `.json`, `.py`, `.html`).
+7. **`pages/ResultPage.tsx`**: Halaman hasil akhir yang menampilkan statistik performa kandidat terpilih, Confusion Matrix (Klasifikasi) atau Scatter Plot Actual vs Predicted & Residuals (Regresi), panel interaktif **Live Model Serving & Inference Playground** (form prediksi dinamis input mentah, batch upload CSV data baru, dan generator kode API cURL & Python), serta tombol download artefak (`.pkl`, `.json`, `.py`, `.html`).
 8. **`components/AIAssistantWidget.tsx`**: Drawer pembimbing AI melayang di sudut kanan bawah yang mengenali seluruh alur halaman termasuk tahapan eksplorasi data (`/eda`).
 
 ---
@@ -183,6 +191,35 @@ flowchart TD
 - **Menambah Model ML Baru**: Edit file [packages/ml_engine/models/registry.py](file:///d:/ml-autonomus/packages/ml_engine/models/registry.py).
 - **Menambah Aturan Preprocessing Baru**: Edit file [packages/ml_engine/recommendations/engine.py](file:///d:/ml-autonomus/packages/ml_engine/recommendations/engine.py).
 - **Menambah Halaman Frontend Baru**: Tambahkan file di `apps/web/src/pages/` dan daftarkan rutenya di [apps/web/src/App.tsx](file:///d:/ml-autonomus/apps/web/src/App.tsx).
+
+---
+
+## 6. Panduan Menjalankan Docker di WSL (Production Mode)
+
+Proyek ini telah dilengkapi dengan `Dockerfile` backend & frontend serta `docker-compose.yml` untuk deployment container di WSL2:
+
+### Langkah Menjalankan:
+1. **Buka Terminal WSL**:
+   ```bash
+   cd /mnt/d/ml-autonomus
+   ```
+2. **Pastikan Server Lokal Windows Sudah Dimatikan** (agar port 8000 & 3000 tidak bentrok).
+3. **Bangun & Jalankan Seluruh Container**:
+   ```bash
+   docker compose up --build -d
+   ```
+4. **Cek Status Container**:
+   ```bash
+   docker compose ps
+   ```
+5. **Akses Layanan dari Browser Windows**:
+   - **Frontend Web Dashboard**: `http://localhost:3000`
+   - **Backend FastAPI API & Docs**: `http://localhost:8000/docs`
+   - **MLflow Tracking Server**: `http://localhost:5000`
+6. **Untuk Menghentikan Container**:
+   ```bash
+   docker compose down
+   ```
 
 ---
 

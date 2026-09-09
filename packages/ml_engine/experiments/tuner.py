@@ -190,7 +190,7 @@ def run_hyperparameter_search(
             scoring=scoring,
             cv=cv,
             random_state=random_seed,
-            n_jobs=-1,
+            n_jobs=1,
             return_train_score=False,
             refit=True,
         )

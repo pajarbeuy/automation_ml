@@ -14,7 +14,7 @@ from config import settings
 from database import Base, engine
 import db_models  # noqa: F401 — ensure ORM models are registered
 
-from routers import projects, datasets, recommendations, pipelines, experiments, assistant
+from routers import projects, datasets, recommendations, pipelines, experiments, assistant, serving
 
 # Create tables (MVP: direct DDL, no Alembic migration needed for fresh deploy)
 Base.metadata.create_all(bind=engine)
@@ -45,6 +45,7 @@ app.include_router(recommendations.router, prefix="/api")
 app.include_router(pipelines.router, prefix="/api")
 app.include_router(experiments.router, prefix="/api")
 app.include_router(assistant.router, prefix="/api")
+app.include_router(serving.router, prefix="/api")
 
 
 @app.get("/health")

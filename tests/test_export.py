@@ -39,6 +39,36 @@ def test_code_generator_returns_valid_python():
     assert 'TARGET = "label"' in script
 
 
+def test_code_generator_regression_and_tuning():
+    config = {
+        "numeric_config": {
+            "house_size": {"missing": "median_imputation", "scaling": "standard_scaling"}
+        },
+        "enable_feature_engineering": True,
+        "is_tuned": True,
+        "model_params": {"n_estimators": 50, "max_depth": 5},
+    }
+    script = generate_pipeline_script(
+        config=config,
+        model_name="RandomForestRegressor",
+        seed=42,
+        experiment_id="exp-reg-1",
+        dataset_filename="houses.csv",
+        target_column="price",
+        task_type="regression",
+    )
+
+    assert "RandomForestRegressor" in script
+    assert "from sklearn.ensemble import RandomForestRegressor" in script
+    assert "max_depth=5" in script
+    assert "n_estimators=50" in script
+    assert "AutoFeatureEngineer" in script
+    assert "stratify=y" not in script
+    assert "KFold" in script
+    assert "r2_score" in script
+    assert "TARGET = \"price\"" in script
+
+
 def test_report_generator_returns_valid_html():
     profile = {
         "duplicate_rows": 0,
@@ -80,6 +110,54 @@ def test_report_generator_returns_valid_html():
     assert "RandomForestClassifier" in html
     assert "Confusion Matrix" in html
     assert "92.00%" in html
+
+
+def test_report_generator_regression():
+    profile = {
+        "duplicate_rows": 0,
+        "features": [
+            {"name": "size", "dtype": "numeric", "missing_count": 0, "missing_rate": 0.0, "unique_count": 50, "constant": False},
+        ],
+    }
+    experiments = [
+        {
+            "model_name": "RandomForestRegressor",
+            "status": "completed",
+            "training_time_seconds": 0.8,
+            "random_seed": 42,
+            "metrics": [
+                {"name": "r2_mean", "value": 0.885, "split": "cv"},
+                {"name": "rmse_mean", "value": 3.25, "split": "cv"},
+                {"name": "mae_mean", "value": 2.10, "split": "cv"},
+            ],
+        }
+    ]
+
+    html = generate_html_report(
+        project_name="House Prices",
+        project_id="proj-reg",
+        target_column="price",
+        dataset_filename="houses.csv",
+        dataset_rows=200,
+        dataset_columns=2,
+        profile=profile,
+        decisions=[],
+        experiments=experiments,
+        candidate_experiment=experiments[0],
+        generated_at="2026-09-09 20:00 UTC",
+        task_type="regression",
+        residuals_summary={"Mean Error": -0.02, "Std Error": 1.15},
+    )
+
+    assert "<!DOCTYPE html>" in html
+    assert "House Prices" in html
+    assert "RandomForestRegressor" in html
+    assert "R² (CV)" in html
+    assert "0.8850" in html
+    assert "3.2500" in html
+    assert "2.1000" in html
+    assert "Mean Error" in html
+    assert "Confusion Matrix" not in html
 
 
 def test_mlflow_tracker_graceful_handling():
