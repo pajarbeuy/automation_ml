@@ -48,6 +48,9 @@ class Project(Base):
     pipeline_config: Mapped["PipelineConfig | None"] = relationship(
         "PipelineConfig", back_populates="project", cascade="all, delete-orphan", uselist=False
     )
+    prediction_logs: Mapped[list["PredictionLog"]] = relationship(
+        "PredictionLog", back_populates="project", cascade="all, delete-orphan"
+    )
 
 
 class Dataset(Base):
@@ -159,3 +162,16 @@ class Artifact(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     experiment: Mapped["Experiment"] = relationship("Experiment", back_populates="artifacts")
+
+
+class PredictionLog(Base):
+    __tablename__ = "prediction_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    experiment_id: Mapped[str | None] = mapped_column(String(36))
+    features_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    prediction_result: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+    project: Mapped["Project"] = relationship("Project", back_populates="prediction_logs")

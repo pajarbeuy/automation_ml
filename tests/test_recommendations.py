@@ -117,3 +117,45 @@ def test_no_recommendations_for_clean_dataset():
     # No missing values → no missing_value recommendations
     missing_recs = [r for r in recs if r.category == "missing_value"]
     assert len(missing_recs) == 0
+
+
+def test_regression_no_class_imbalance(skewed_numeric_df):
+    """Ensure that regression tasks NEVER produce class_imbalance recommendations."""
+    profile = profile_dataset(skewed_numeric_df, "label")
+    recs = generate_recommendations(skewed_numeric_df, profile, task_type="regression")
+    imbalance_recs = [r for r in recs if r.category == "class_imbalance"]
+    assert len(imbalance_recs) == 0
+
+
+def test_regression_target_skewness_and_outliers():
+    """Verify that a skewed continuous target produces target_transformation and target_outliers."""
+    import numpy as np
+    np.random.seed(42)
+    n = 200
+    # Right-skewed housing prices with some extreme outliers
+    prices = np.random.exponential(scale=500000, size=n)
+    prices[0] = 15000000.0  # extreme outlier
+    prices[1] = 20000000.0  # extreme outlier
+    prices[2] = 25000000.0  # extreme outlier
+    df = pd.DataFrame({
+        "sqft": np.random.normal(1500, 300, n),
+        "bedrooms": np.random.choice([1, 2, 3, 4], n),
+        "price": prices,
+    })
+    profile = profile_dataset(df, "price")
+    recs = generate_recommendations(df, profile, task_type="regression")
+
+    # No class imbalance
+    assert not any(r.category == "class_imbalance" for r in recs)
+
+    # Target skewness recommendation should exist
+    skew_recs = [r for r in recs if r.category == "target_transformation"]
+    assert len(skew_recs) == 1
+    assert skew_recs[0].recommended_action == "log1p_transform"
+    assert skew_recs[0].column == "price"
+
+    # Target outliers recommendation should exist
+    outlier_recs = [r for r in recs if r.category == "target_outliers"]
+    assert len(outlier_recs) == 1
+    assert outlier_recs[0].recommended_action == "use_robust_models"
+

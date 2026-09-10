@@ -7,14 +7,15 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "packages", "ml_engine"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "packages", "ml_engine"))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from database import Base, engine
 import db_models  # noqa: F401 — ensure ORM models are registered
 
-from routers import projects, datasets, recommendations, pipelines, experiments, assistant, serving
+from routers import projects, datasets, recommendations, pipelines, experiments, assistant, serving, monitoring
 
 # Create tables (MVP: direct DDL, no Alembic migration needed for fresh deploy)
 Base.metadata.create_all(bind=engine)
@@ -46,8 +47,18 @@ app.include_router(pipelines.router, prefix="/api")
 app.include_router(experiments.router, prefix="/api")
 app.include_router(assistant.router, prefix="/api")
 app.include_router(serving.router, prefix="/api")
+app.include_router(monitoring.router, prefix="/api")
 
 
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "0.1.0"}
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {str(exc)}"},
+    )
+

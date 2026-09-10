@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Upload, FileText, ChevronRight, AlertCircle, CheckCircle2, TrendingUp, Target } from 'lucide-react';
+import { Upload, FileText, ChevronRight, AlertCircle, AlertTriangle, TrendingUp, Target } from 'lucide-react';
 import { uploadDataset, listDatasets, getProject } from '../api/client';
 import type { Dataset, Project } from '../types';
 
@@ -102,16 +102,17 @@ export function UploadPage() {
       {existing.length > 0 && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-            <h3>Existing Datasets</h3>
+            <h3 style={{ margin: 0 }}>Existing Datasets</h3>
           </div>
           {existing.map(d => (
             <div key={d.id} style={{
               display: 'flex', alignItems: 'center', gap: '0.75rem',
-              padding: '0.75rem', background: 'var(--bg-elevated)', borderRadius: '8px', marginBottom: '0.5rem',
+              padding: '0.85rem 1rem', background: 'var(--bg-inset)', borderRadius: '8px',
+              border: '1px solid var(--border-inset)', boxShadow: 'var(--neu-inset-sm)', marginBottom: '0.5rem',
             }}>
-              <FileText size={16} color="var(--accent)" />
+              <FileText size={18} color="var(--accent)" />
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 500, fontSize: '0.875rem' }}>{d.filename}</div>
+                <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{d.filename}</div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                   {d.rows?.toLocaleString()} rows · {d.columns} cols
                 </div>
@@ -127,12 +128,13 @@ export function UploadPage() {
         </div>
       )}
 
-      <div className="grid-2" style={{ gap: '1.5rem', alignItems: 'start' }}>
+      <div className="grid-2" style={{ gap: '1.5rem', alignItems: 'stretch' }}>
         {/* Drop zone */}
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div
             id="upload-dropzone"
             className={`upload-zone ${dragging ? 'dragging' : ''}`}
+            style={{ flex: 1, minHeight: '260px' }}
             onDrop={onDrop}
             onDragOver={e => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
@@ -178,93 +180,99 @@ export function UploadPage() {
         </div>
 
         {/* Config panel */}
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-            <h3 style={{ margin: 0 }}>Configuration</h3>
-            <span className={`badge ${isRegression ? 'badge-success' : 'badge-primary'}`} style={{ textTransform: 'capitalize' }}>
-              {isRegression ? <TrendingUp size={12} /> : <Target size={12} />} {taskType}
-            </span>
+        <div className="card" style={{ height: '100%', minHeight: '260px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ margin: 0 }}>Configuration</h3>
+              <span className={`badge ${isRegression ? 'badge-success' : 'badge-primary'}`} style={{ textTransform: 'capitalize' }}>
+                {isRegression ? <TrendingUp size={12} /> : <Target size={12} />} {taskType}
+              </span>
+            </div>
+
+            {headers.length > 0 ? (
+              <>
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label className="label" htmlFor="target-select">Target Column *</label>
+                  <select
+                    id="target-select"
+                    className="input select"
+                    value={targetColumn}
+                    onChange={e => setTargetColumn(e.target.value)}
+                  >
+                    {headers.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.375rem' }}>
+                    The column the model will predict
+                  </div>
+
+                  {/* Target Column Info/Warning based on task_type */}
+                  {isRegression && (looksLikeContinuous || highCardinalityNumeric) && (
+                    <div className="alert alert-info" style={{ marginTop: '0.75rem', fontSize: '0.78rem' }}>
+                      <TrendingUp size={14} />
+                      <div>
+                        <strong style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}><Target size={14} /> Continuous numeric target detected for Regression Project.</strong><br />
+                        System is ready to train regression models (Linear Regression, Ridge, Random Forest, XGBoost, etc.) to predict <code>{targetColumn}</code>.
+                      </div>
+                    </div>
+                  )}
+
+                  {!isRegression && (looksLikeContinuous || highCardinalityNumeric) && (
+                    <div className="alert alert-warning" style={{ marginTop: '0.75rem', fontSize: '0.78rem' }}>
+                      <AlertTriangle size={14} />
+                      <div>
+                        <strong style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}><AlertTriangle size={14} /> Continuous numeric target detected.</strong><br />
+                        This project is set to <strong>Classification</strong>. If you want to predict continuous values like prices or ages, please create a new project with Task Type set to <strong>Regression</strong> in the Dashboard.
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <div className="label" style={{ marginBottom: '0.5rem' }}>Detected Columns</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', maxHeight: '120px', overflowY: 'auto' }}>
+                    {headers.map(h => (
+                      <span
+                        key={h}
+                        className={`badge ${h === targetColumn ? 'badge-primary' : 'badge-muted'}`}
+                      >
+                        {h === targetColumn && <Target size={11} style={{ marginRight: 2 }} />}
+                        {h}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-muted)' }}>
+                <FileText size={38} strokeWidth={1.5} style={{ marginBottom: '0.75rem', opacity: 0.5, color: 'var(--accent)' }} />
+                <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem', fontSize: '0.95rem' }}>No Dataset Uploaded</div>
+                <div style={{ fontSize: '0.82rem', maxWidth: '280px' }}>Drop a CSV file on the left to configure target column and start automated profiling.</div>
+              </div>
+            )}
           </div>
 
-          {headers.length > 0 ? (
-            <>
-              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-                <label className="label" htmlFor="target-select">Target Column *</label>
-                <select
-                  id="target-select"
-                  className="input select"
-                  value={targetColumn}
-                  onChange={e => setTargetColumn(e.target.value)}
-                >
-                  {headers.map(h => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.375rem' }}>
-                  The column the model will predict
-                </div>
-
-                {/* Target Column Info/Warning based on task_type */}
-                {isRegression && (looksLikeContinuous || highCardinalityNumeric) && (
-                  <div className="alert alert-info" style={{ marginTop: '0.75rem', fontSize: '0.78rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', color: '#a6e3a1' }}>
-                    <TrendingUp size={14} />
-                    <div>
-                      <strong>🎯 Continuous numeric target detected for Regression Project.</strong><br />
-                      System is ready to train regression models (Linear Regression, Ridge, Random Forest, XGBoost, etc.) to predict <code>{targetColumn}</code>.
-                    </div>
-                  </div>
-                )}
-
-                {!isRegression && (looksLikeContinuous || highCardinalityNumeric) && (
-                  <div className="alert alert-warning" style={{ marginTop: '0.75rem', fontSize: '0.78rem' }}>
-                    <AlertCircle size={14} />
-                    <div>
-                      <strong>⚠ Continuous numeric target detected.</strong><br />
-                      This project is set to <strong>Classification</strong>. If you want to predict continuous values like prices or ages, please create a new project with Task Type set to <strong>Regression</strong> in the Dashboard.
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ marginBottom: '1.25rem' }}>
-                <div className="label" style={{ marginBottom: '0.5rem' }}>Detected Columns</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
-                  {headers.map(h => (
-                    <span
-                      key={h}
-                      className={`badge ${h === targetColumn ? 'badge-primary' : 'badge-muted'}`}
-                    >
-                      {h === targetColumn && <CheckCircle2 size={10} />}
-                      {h}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                id="upload-btn"
-                className="btn btn-primary"
-                style={{ width: '100%' }}
-                onClick={handleUpload}
-                disabled={uploading || !targetColumn}
-              >
-                {uploading ? (
-                  <>
-                    <span className="spinner" />
-                    Profiling dataset…
-                  </>
-                ) : (
-                  <>
-                    <Upload size={16} />
-                    Upload & Profile Dataset
-                  </>
-                )}
-              </button>
-            </>
-          ) : (
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>
-              Drop a CSV file to configure target column
-            </div>
+          {headers.length > 0 && (
+            <button
+              id="upload-btn"
+              className="btn btn-primary"
+              style={{ width: '100%', marginTop: '1rem' }}
+              onClick={handleUpload}
+              disabled={uploading || !targetColumn}
+            >
+              {uploading ? (
+                <>
+                  <span className="spinner" />
+                  Profiling dataset…
+                </>
+              ) : (
+                <>
+                  <Upload size={16} />
+                  Upload & Profile Dataset
+                </>
+              )}
+            </button>
           )}
         </div>
       </div>
@@ -279,7 +287,7 @@ export function UploadPage() {
                 <tr>
                   {headers.map(h => (
                     <th key={h} style={{ color: h === targetColumn ? 'var(--accent-hover)' : undefined }}>
-                      {h === targetColumn && '🎯 '}{h}
+                      {h === targetColumn && <Target size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle', color: 'var(--accent-hover)' }} />}{h}
                     </th>
                   ))}
                 </tr>

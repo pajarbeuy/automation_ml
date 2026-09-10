@@ -139,16 +139,29 @@ Backend menggunakan **FastAPI** untuk menyediakan REST API yang dikonsumsi oleh 
 
 ### 💻 C. Frontend Web (`apps/web/src/`)
 
-Frontend dibangun menggunakan **React 18 + TypeScript + Vite + Tailwind CSS v4**.
+Frontend dibangun menggunakan **React 18 + TypeScript + Vite + Tailwind CSS v4** dengan sistem desain **Soft Light Clay Neumorphism (Soft UI)** yang bersih, halus, solid tanpa gradasi berlebih, serta mengeliminasi 100% Unicode emoji menjadi semantic SVG icons dari `lucide-react`.
+
+- **Neumorphism Design System (`index.css`)**:
+  - **Surface & Palette**: Warna clay lembut matte (`#e6ecf4` base, surface, dan card; `#dde5ef` recessed inset; `#edf2f8` elevated).
+  - **Refined Subtle Shadows**: Bayangan taktil halus tanpa efek bengkak berlebihan (`-3px -3px 8px rgba(255,255,255,0.95)` dan `3px 4px 10px rgba(166,178,195,0.35)`).
+  - **Recessed Inset Shadows**: Cekungan fisik lembut (`inset 2px 2px 5px rgba(166,178,195,0.35), inset -2px -2px 5px rgba(255,255,255,0.9)`).
+  - **Solid Tactile Controls**: Tombol dan logo otak solid tanpa gradasi berlebihan (`#7c3aed` solid purple untuk logo, `#4338ca` solid indigo untuk primary button).
+  - **Card Sizing Consistency**: Menggunakan grid `align-items: stretch` dengan kontainer dropzone dan konfigurasi berukuran tinggi serasi (`min-height: 260px`).
+  - **Responsive Design System**: Mendukung layar desktop, tablet, dan smartphone dengan bar navigasi mobile atas (`mobile-top-bar`), backdrop drawer (`sidebar-overlay`), dan tombol hamburger toggle.
+  - **Robust Error Handling**:
+    - `components/ErrorBoundary.tsx`: Menangkap runtime crash rendering React secara anggun dengan tombol pemulihan *Muat Ulang Halaman*.
+    - `api/client.ts`: Axios response interceptor otomatis mengekstrak pesan validasi FastAPI (Pydantic `detail`) menjadi string yang ramah pengguna.
+    - `apps/api/main.py`: Global exception handler FastAPI menangkap uncaught internal error dan mengembalikan JSON 500 terstruktur.
 
 1. **`pages/DashboardPage.tsx`**: Halaman utama untuk membuat proyek (Klasifikasi / Regresi) atau memilih proyek.
-2. **`pages/UploadPage.tsx`**: Halaman pengunggahan file CSV dataset dan pemilih kolom target (*label*).
+2. **`pages/UploadPage.tsx`**: Halaman pengunggahan file CSV dataset dan pemilih kolom target (*label*) dengan kartu dropzone dan konfigurasi seimbang.
 3. **`pages/EDAPage.tsx`**: Halaman 5-tab visualisasi eksplorasi data (Overview, Missing, Distributions, Correlations, Target).
 4. **`pages/TreatmentPage.tsx`**: Halaman kartu keputusan preprocessing & preview visualizer histogram Before vs After Scaling. Menyediakan tombol *Ask AI* dengan parsing bukti statistik fleksibel (`=` dan `:`) agar modal penjelasan menyajikan angka nyata.
-5. **`pages/PipelinePage.tsx`**: Visualisasi DAG pipeline scikit-learn dan tombol uji validasi pipeline.
+5. **`pages/PipelinePage.tsx`**: Visualisasi DAG pipeline scikit-learn dan tombol uji validasi pipeline dengan icon komponen taktil.
 6. **`pages/ExperimentsPage.tsx`**: Halaman seleksi algoritma model (Klasifikasi / Regresi), toggle Auto Feature Engineering, pengaturan CV Folds, tombol `Tune` kontekstual pada setiap baris hasil eksperimen selesai dan kartu *Best Model*, modal Hyperparameter Tuning dengan pencarian Randomized Search, tombol *Run & Register Tuned Model*, kartu ringkasan **AI Benchmark Summary**, serta mekanisme *live polling* reaktif setiap 2 detik yang otomatis meng-update tabel dan ringkasan AI seketika eksperimen selesai.
 7. **`pages/ResultPage.tsx`**: Halaman hasil akhir yang menampilkan statistik performa kandidat terpilih, Confusion Matrix (Klasifikasi) atau Scatter Plot Actual vs Predicted & Residuals (Regresi), panel interaktif **Live Model Serving & Inference Playground** (form prediksi dinamis input mentah, batch upload CSV data baru, dan generator kode API cURL & Python), serta tombol download artefak (`.pkl`, `.json`, `.py`, `.html`).
-8. **`components/AIAssistantWidget.tsx`**: Drawer pembimbing AI melayang di sudut kanan bawah yang mengenali seluruh alur halaman termasuk tahapan eksplorasi data (`/eda`).
+8. **`components/AIAssistantWidget.tsx`**: Drawer pembimbing AI melayang di sudut kanan bawah dengan styling neumorphic yang mengenali seluruh alur halaman termasuk tahapan eksplorasi data (`/eda`).
+9. **`components/ErrorBoundary.tsx`**: Komponen penangkap galat runtime React untuk mencegah layar putih kosong saat terjadi error tak terduga.
 
 ---
 
@@ -190,6 +203,8 @@ flowchart TD
 ### Tempat Mengedit Kode Jika Ingin Menambah Fitur:
 - **Menambah Model ML Baru**: Edit file [packages/ml_engine/models/registry.py](file:///d:/ml-autonomus/packages/ml_engine/models/registry.py).
 - **Menambah Aturan Preprocessing Baru**: Edit file [packages/ml_engine/recommendations/engine.py](file:///d:/ml-autonomus/packages/ml_engine/recommendations/engine.py).
+- **Menambah Fitur Inferensi & Serving**: Edit file [packages/ml_engine/serving/inference.py](file:///d:/ml-autonomus/packages/ml_engine/serving/inference.py) dan [apps/api/routers/serving.py](file:///d:/ml-autonomus/apps/api/routers/serving.py).
+- **Menambah Uji Statistik Drift Monitoring**: Edit file [packages/ml_engine/monitoring/drift_detector.py](file:///d:/ml-autonomus/packages/ml_engine/monitoring/drift_detector.py) dan [apps/api/routers/monitoring.py](file:///d:/ml-autonomus/apps/api/routers/monitoring.py).
 - **Menambah Halaman Frontend Baru**: Tambahkan file di `apps/web/src/pages/` dan daftarkan rutenya di [apps/web/src/App.tsx](file:///d:/ml-autonomus/apps/web/src/App.tsx).
 
 ---

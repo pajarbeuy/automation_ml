@@ -218,6 +218,22 @@ def explain_recommendation(rec: dict[str, Any]) -> dict[str, Any]:
             f"Direkomendasikan menggunakan Stratified K-Fold CV serta metrik F1-Score atau PR-AUC untuk penilaian performa yang objektif."
         )
 
+    # 6. Kategori Transformasi Target Regresi (Target Skewness)
+    elif category in ("target_transformation", "target_skewness"):
+        skew_val = _parse_num(evidence.get("target_skewness") or evidence.get("skewness"), 0.0)
+        detail = (
+            f"Kolom target regresi '{column}' memiliki kemiringan distribusi yang tinggi (skewness {skew_val:.2f}). "
+            f"Aksi '{action_title}' direkomendasikan untuk menstabilkan variansi residual serta membantu model regresi menangani nilai berskala besar dengan galat yang lebih seimbang."
+        )
+
+    # 7. Kategori Outlier Target Regresi
+    elif category in ("target_outliers", "target_outlier"):
+        rate_str = str(evidence.get("target_outlier_rate", "5%"))
+        detail = (
+            f"Ditemukan outlier signifikan ({rate_str}) pada kolom target regresi '{column}'. "
+            f"Aksi '{action_title}' disarankan agar estimasi bobot model regresi tidak terdistorsi secara ekstrim oleh data pencilan."
+        )
+
     else:
         detail = rationale or f"Rekomendasi {action_title} dihitung otomatis berdasarkan karakteristik statistik dataset."
 

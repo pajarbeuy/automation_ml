@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # =============================================================================
-# ROUTER: MODEL SERVING & INFERENCE API
+# ROUTER: MODEL SERVING & INFERENCE API (Updated for dropped feature handling)
 # =============================================================================
 # Deskripsi: Endpoint produksi untuk melayani prediksi data langsung (live inference)
 #            menggunakan model kandidat terbaik Scikit-Learn Pipeline yang tersimpan.
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -30,7 +30,7 @@ if _ENGINE_PATH not in sys.path:
 
 from config import settings
 from database import get_db
-from db_models import Artifact, Dataset, Experiment, Project
+from db_models import Artifact, Dataset, Experiment, PredictionLog, Project
 from serving.inference import load_pipeline, predict
 
 router = APIRouter(tags=["Model Serving & Inference"])
@@ -152,6 +152,62 @@ def get_candidate_schema(project_id: str, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Helper: Asynchronous Prediction Logging
+# ---------------------------------------------------------------------------
+
+def _async_log_predictions(
+    project_id: str,
+    experiment_id: str,
+    records: list[tuple[dict[str, Any], dict[str, Any]]],
+) -> None:
+    """Menyimpan log fitur dan hasil prediksi ke database secara non-blocking di latar belakang."""
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        logs = [
+            PredictionLog(
+                project_id=project_id,
+                experiment_id=experiment_id,
+                features_json=feat,
+                prediction_result=res,
+            )
+            for feat, res in records
+        ]
+        db.bulk_save_objects(logs)
+        db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
+def _get_candidate_cv_metrics(candidate_exp: Experiment, storage_path: str) -> dict[str, float]:
+    """Mengambil metrik CV (r2_mean, mae_mean, rmse_mean) dari database atau file metrics.json."""
+    metrics_map: dict[str, float] = {}
+    if candidate_exp.metrics:
+        for m in candidate_exp.metrics:
+            if m.split == "cv":
+                metrics_map[m.name] = m.value
+
+    if "r2_mean" not in metrics_map and "mae_mean" not in metrics_map:
+        metrics_file = os.path.join(storage_path, "artifacts", candidate_exp.id, "metrics.json")
+        if os.path.exists(metrics_file):
+            try:
+                import json
+                with open(metrics_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    summary = data.get("summary", {})
+                    for k, v in summary.items():
+                        if isinstance(v, (int, float)):
+                            metrics_map[k] = float(v)
+            except Exception:
+                pass
+
+    return metrics_map
+
+
+# ---------------------------------------------------------------------------
 # Endpoint 2: Live Inference Prediction (Single Record / Batch JSON)
 # ---------------------------------------------------------------------------
 
@@ -159,6 +215,7 @@ def get_candidate_schema(project_id: str, db: Session = Depends(get_db)):
 def predict_live(
     project_id: str,
     payload: PredictRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """
@@ -167,14 +224,36 @@ def predict_live(
     """
     project, candidate_exp, pipeline_path = _get_candidate_and_pipeline(project_id, db)
 
-    if not payload.features and not payload.instances:
+    if payload.features is None and payload.instances is None:
         raise HTTPException(status_code=422, detail="Kirimkan 'features' (objek) atau 'instances' (array)")
 
     pipeline = load_pipeline(pipeline_path)
     task_type = project.task_type or "classification"
+    cv_metrics = _get_candidate_cv_metrics(candidate_exp, settings.storage_path) if task_type == "regression" else None
 
     input_data = payload.features if payload.features is not None else payload.instances
-    results = predict(pipeline, input_data, task_type=task_type)
+    try:
+        results = predict(pipeline, input_data, task_type=task_type, metrics=cv_metrics)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gagal menjalankan inferensi: {exc}")
+
+    # Logging asinkron untuk monitoring data drift
+    if payload.features is not None:
+        background_tasks.add_task(
+            _async_log_predictions,
+            project_id=project_id,
+            experiment_id=candidate_exp.id,
+            records=[(payload.features, results[0])],
+        )
+    elif payload.instances is not None:
+        background_tasks.add_task(
+            _async_log_predictions,
+            project_id=project_id,
+            experiment_id=candidate_exp.id,
+            records=list(zip(payload.instances, results)),
+        )
 
     if payload.features is not None:
         return {
@@ -200,6 +279,7 @@ def predict_live(
 @router.post("/projects/{project_id}/predict/batch-csv")
 async def predict_batch_csv(
     project_id: str,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
@@ -213,15 +293,30 @@ async def predict_batch_csv(
     task_type = project.task_type or "classification"
 
     content = await file.read()
+    if not content or len(content.strip()) == 0:
+        raise HTTPException(status_code=400, detail="File CSV kosong. Silakan upload file yang valid.")
+
+    # Deteksi encoding UTF-8 dengan fallback Latin-1
     try:
-        df_input = pd.read_csv(io.BytesIO(content))
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            text = content.decode("latin-1")
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Gagal membaca encoding file: {exc}")
+
+    try:
+        df_input = pd.read_csv(io.StringIO(text))
+        # Jika hanya 1 kolom dan ada separator lain
+        if len(df_input.columns) == 1 and any(sep in df_input.columns[0] for sep in [";", "\t"]):
+            df_input = pd.read_csv(io.StringIO(text), sep=None, engine="python")
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Gagal membaca file CSV: {exc}")
+        raise HTTPException(status_code=400, detail=f"Gagal mem-parsing file CSV: {exc}")
 
     if df_input.empty:
-        raise HTTPException(status_code=400, detail="File CSV kosong")
+        raise HTTPException(status_code=400, detail="File CSV tidak memiliki baris data (hanya header atau kosong)")
 
-    # Hapus target column jika ada
+    # Hapus target column jika ada di dalam input CSV
     target = project.target_column
     if target and target in df_input.columns:
         df_features = df_input.drop(columns=[target])
@@ -229,14 +324,37 @@ async def predict_batch_csv(
         df_features = df_input.copy()
 
     pipeline = load_pipeline(pipeline_path)
-    preds = predict(pipeline, df_features, task_type=task_type)
+    cv_metrics = _get_candidate_cv_metrics(candidate_exp, settings.storage_path) if task_type == "regression" else None
+    try:
+        preds = predict(pipeline, df_features, task_type=task_type, metrics=cv_metrics)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Gagal validasi batch CSV: {exc}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gagal memproses prediksi batch: {exc}")
+
+    # Logging asinkron sampel baris batch untuk monitoring data drift (hingga 500 baris)
+    sample_records = [
+        (df_features.iloc[i].to_dict(), preds[i])
+        for i in range(min(len(preds), 500))
+    ]
+    background_tasks.add_task(
+        _async_log_predictions,
+        project_id=project_id,
+        experiment_id=candidate_exp.id,
+        records=sample_records,
+    )
 
     # Tambahkan kolom hasil ke DataFrame asli
     df_result = df_input.copy()
     df_result["prediction"] = [p["prediction"] for p in preds]
 
-    if task_type == "classification" and "confidence" in preds[0]:
-        df_result["confidence"] = [p.get("confidence") for p in preds]
+    if len(preds) > 0:
+        if "confidence" in preds[0]:
+            df_result["confidence"] = [p.get("confidence") for p in preds]
+        if "margin_of_error" in preds[0]:
+            df_result["margin_of_error"] = [p.get("margin_of_error") for p in preds]
+            df_result["interval_lower"] = [p.get("interval_lower") for p in preds]
+            df_result["interval_upper"] = [p.get("interval_upper") for p in preds]
 
     output_csv = df_result.to_csv(index=False)
     filename = f"predictions_{file.filename or 'data.csv'}"

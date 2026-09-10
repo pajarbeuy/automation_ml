@@ -428,33 +428,41 @@ export function ExperimentsPage() {
           }}
         >
           <div
-            className="animate-slide-up"
+            className="animate-slide-up card"
             onClick={e => e.stopPropagation()}
             style={{
-              background: '#181825', border: '1px solid #313244', borderRadius: '16px',
-              maxWidth: '750px', width: '100%', padding: '1.75rem', color: '#cdd6f4', maxHeight: '90vh', overflowY: 'auto',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: '16px',
+              maxWidth: '750px',
+              width: '100%',
+              padding: '1.75rem',
+              color: 'var(--text-primary)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: 'var(--neu-raised-hover)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #313244', paddingBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-inset)', paddingBottom: '0.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <Zap size={22} style={{ color: '#f9e2af' }} />
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>
+                <Zap size={22} style={{ color: 'var(--accent)' }} />
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
                   Hyperparameter Optimization Engine (Randomized Search)
                 </h3>
               </div>
-              <button onClick={() => setShowTuneModal(false)} style={{ background: 'none', border: 'none', color: '#a6adc8', cursor: 'pointer' }}>
+              <button onClick={() => setShowTuneModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.25rem' }}>
                 &times;
               </button>
             </div>
 
-            <div className="grid-2" style={{ gap: '1rem', marginBottom: '1.25rem', background: '#1e1e2e', padding: '1rem', borderRadius: '10px' }}>
+            <div className="grid-2" style={{ gap: '1rem', marginBottom: '1.25rem', background: 'var(--bg-inset)', padding: '1rem', borderRadius: '10px', boxShadow: 'var(--neu-inset-sm)' }}>
               <div className="form-group">
                 <label className="label">Pilih Algoritma Model:</label>
                 <select
                   value={tuneModel}
                   onChange={e => setTuneModel(e.target.value)}
-                  style={{ background: '#313244', border: '1px solid #45475a', color: '#cdd6f4', padding: '0.4rem 0.8rem', borderRadius: '6px', fontSize: '0.85rem', width: '100%' }}
+                  className="select input"
+                  style={{ width: '100%' }}
                 >
                   {availableModels.map(m => (
                     <option key={m} value={m}>{MODEL_DISPLAY[m] ?? m}</option>
@@ -474,14 +482,14 @@ export function ExperimentsPage() {
                     onChange={e => setNTrials(Number(e.target.value))}
                     style={{ flex: 1 }}
                   />
-                  <strong style={{ fontSize: '0.9rem', color: '#f9e2af' }}>{nTrials} Trials</strong>
+                  <strong style={{ fontSize: '0.9rem', color: 'var(--accent)' }}>{nTrials} Trials</strong>
                 </div>
               </div>
             </div>
 
             <button
               className="btn btn-primary"
-              style={{ width: '100%', marginBottom: '1.25rem', background: 'linear-gradient(135deg, #fab387, #f9e2af)', color: '#11111b', fontWeight: 700 }}
+              style={{ width: '100%', marginBottom: '1.25rem' }}
               onClick={handleRunTuning}
               disabled={isTuning}
             >
@@ -500,53 +508,56 @@ export function ExperimentsPage() {
 
             {/* TUNING RESULTS */}
             {tuningResult && (
-              <div className="animate-fade-in" style={{ background: '#1e1e2e', borderRadius: '12px', padding: '1.25rem', border: '1px solid #313244' }}>
+              <div className="animate-fade-in" style={{ background: 'var(--bg-inset)', borderRadius: '12px', padding: '1.25rem', border: '1px solid var(--border-inset)', boxShadow: 'var(--neu-inset-sm)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
                   <div>
-                    <h4 style={{ margin: 0, color: '#a6e3a1', fontSize: '1rem' }}>🏆 Skor Terbaik: {tuningResult.best_score.toFixed(4)} ({tuningResult.primary_metric})</h4>
-                    <span style={{ fontSize: '0.78rem', color: '#a6adc8' }}>Waktu Optimasi: {tuningResult.total_time_seconds}s | Trials: {tuningResult.trials.length}</span>
+                    <h4 style={{ margin: 0, color: 'var(--success)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <Trophy size={18} style={{ color: 'var(--warning)', flexShrink: 0 }} />
+                      Skor Terbaik: {tuningResult.best_score.toFixed(4)} ({tuningResult.primary_metric})
+                    </h4>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Waktu Optimasi: {tuningResult.total_time_seconds}s | Trials: {tuningResult.trials.length}</span>
                   </div>
                   <button
                     className="btn btn-primary"
-                    style={{ background: 'linear-gradient(135deg, #a6e3a1, #94e2d5)', color: '#11111b', fontWeight: 700, fontSize: '0.82rem', gap: '0.35rem' }}
+                    style={{ fontWeight: 600, fontSize: '0.82rem', gap: '0.35rem' }}
                     onClick={handleRunTunedExperiment}
                   >
                     <Play size={14} /> Run & Register Tuned Model
                   </button>
                 </div>
 
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#cba6f7', marginBottom: '0.5rem' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent)', marginBottom: '0.5rem' }}>
                   Tuned Hyperparameters Terpilih:
                 </div>
 
-                <div style={{ background: '#181825', borderRadius: '8px', padding: '0.75rem', marginBottom: '1rem', border: '1px solid #313244' }}>
+                <div style={{ background: 'var(--bg-card)', borderRadius: '8px', padding: '0.75rem', marginBottom: '1rem', border: '1px solid var(--border)', boxShadow: 'var(--neu-raised-sm)' }}>
                   <table style={{ width: '100%', fontSize: '0.82rem', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ borderBottom: '1px solid #313244', color: '#a6adc8', textAlign: 'left' }}>
+                      <tr style={{ borderBottom: '1px solid var(--border-inset)', color: 'var(--text-secondary)', textAlign: 'left' }}>
                         <th style={{ padding: '0.3rem' }}>Parameter</th>
                         <th style={{ padding: '0.3rem' }}>Nilai Hasil Tuning</th>
                       </tr>
                     </thead>
                     <tbody>
                       {Object.entries(tuningResult.best_params).map(([param, val]) => (
-                        <tr key={param} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                          <td style={{ padding: '0.3rem', color: '#89b4fa', fontFamily: 'monospace' }}>{param}</td>
-                          <td style={{ padding: '0.3rem', fontWeight: 600, color: '#a6e3a1' }}>{String(val)}</td>
+                        <tr key={param} style={{ borderBottom: '1px solid var(--border-inset)' }}>
+                          <td style={{ padding: '0.3rem', color: 'var(--accent)', fontFamily: 'monospace', fontWeight: 600 }}>{param}</td>
+                          <td style={{ padding: '0.3rem', fontWeight: 600, color: 'var(--success)' }}>{String(val)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
 
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#cdd6f4', marginBottom: '0.5rem' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
                   Riwayat Progres Trials:
                 </div>
-                <div style={{ maxHeight: '150px', overflowY: 'auto', background: '#181825', padding: '0.5rem', borderRadius: '8px' }}>
+                <div style={{ maxHeight: '150px', overflowY: 'auto', background: 'var(--bg-inset)', padding: '0.5rem', borderRadius: '8px', border: '1px solid var(--border-inset)', boxShadow: 'var(--neu-inset-sm)' }}>
                   {tuningResult.trials.map(t => (
-                    <div key={t.trial_index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '0.3rem 0.5rem', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                      <span>Trial #{t.trial_index}</span>
-                      <span>Score: <strong style={{ color: '#a6e3a1' }}>{t.score.toFixed(4)}</strong></span>
-                      <span style={{ color: '#a6adc8' }}>{t.duration_seconds}s</span>
+                    <div key={t.trial_index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '0.3rem 0.5rem', borderBottom: '1px solid var(--border-inset)' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Trial #{t.trial_index}</span>
+                      <span>Score: <strong style={{ color: 'var(--success)' }}>{t.score.toFixed(4)}</strong></span>
+                      <span style={{ color: 'var(--text-muted)' }}>{t.duration_seconds}s</span>
                     </div>
                   ))}
                 </div>

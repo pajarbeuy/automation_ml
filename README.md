@@ -53,28 +53,32 @@ pytest tests/ -v
 
 ## User Journey
 
-1. **Dashboard** → Create project
+1. **Dashboard** → Create project (Classification / Regression)
 2. **Upload** → Drop CSV, select target column → automatic profiling
-3. **EDA** → Inspect distributions, missing values, class balance
-4. **Treatment** → Review recommendations, accept/override/reject
+3. **EDA** → Inspect continuous/categorical distributions, missing values, class balance / target skewness
+4. **Treatment** → Review task-aware recommendations, accept/override/reject
 5. **Pipeline** → Generate leakage-safe sklearn Pipeline, validate
-6. **Experiments** → Train multiple classifiers, compare with CV
+6. **Experiments** → Train multiple models, compare with CV, tune hyperparameters
+7. **Results & Serving** → Review metrics, residuals / confusion matrix, test live inference (with confidence & prediction intervals), batch CSV prediction, and download code / HTML reports
+8. **Drift Monitoring** → Continuous production feature & data drift tracking (KS-Test, PSI) with live simulator
 
 ## Architecture
 
 ```
 apps/api/          FastAPI backend
-apps/web/          React + Vite frontend
+apps/web/          React + Vite frontend (Neumorphic UI)
 packages/
   ml_engine/
     profiling/     Dataset profiler
     eda/           EDA chart data builder
     detection/     Missing / outlier / imbalance detectors
-    recommendations/ Evidence-based recommendation engine
+    recommendations/ Evidence-based recommendation engine (task-aware)
     preprocessing/ Pipeline builder + custom transformers
-    models/        Model registry
-    evaluation/    Stratified CV evaluator
-    experiments/   End-to-end experiment runner
+    models/        Model registry (Classification & Regression)
+    evaluation/    CV evaluator (StratifiedKFold & KFold)
+    experiments/   End-to-end experiment runner & tuner
+    serving/       Live inference & uncertainty estimation
+    monitoring/    Statistical model & data drift detector
 tests/             pytest test suite
 docker-compose.yml
 ```

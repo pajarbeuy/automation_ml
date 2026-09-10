@@ -96,3 +96,14 @@ def test_serving_inference_regression_single_and_batch():
     res_batch = predict(pipeline, df_new, task_type="regression")
     assert len(res_batch) == 2
     assert res_batch[0]["prediction"] < res_batch[1]["prediction"]
+
+    # 4. Test regression with CV metrics (confidence, margin of error, interval bounds)
+    cv_metrics = {"r2_mean": 0.85, "mae_mean": 15000.0}
+    res_with_metrics = predict(pipeline, raw_input, task_type="regression", metrics=cv_metrics)
+    assert len(res_with_metrics) == 1
+    item = res_with_metrics[0]
+    assert item["confidence"] == 0.85
+    assert item["confidence_metric"] == "R2 Score"
+    assert item["margin_of_error"] == 15000.0
+    assert item["interval_lower"] == round(item["prediction"] - 15000.0, 2)
+    assert item["interval_upper"] == round(item["prediction"] + 15000.0, 2)

@@ -19,7 +19,9 @@ try:
         pass
 except Exception:
     # Graceful fallback to local SQLite database file
-    sqlite_url = "sqlite:///./automl.db"
+    from pathlib import Path
+    db_file = Path(__file__).parent / "automl.db"
+    sqlite_url = f"sqlite:///{db_file.resolve().as_posix()}"
     engine = create_engine(
         sqlite_url,
         pool_pre_ping=True,

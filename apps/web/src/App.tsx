@@ -7,8 +7,10 @@ import { TreatmentPage } from './pages/TreatmentPage';
 import { PipelinePage } from './pages/PipelinePage';
 import { ExperimentsPage } from './pages/ExperimentsPage';
 import { ResultPage } from './pages/ResultPage';
+import { DriftMonitoringPage } from './pages/DriftMonitoringPage';
 import { Sidebar } from './components/Sidebar';
 import { AIAssistantWidget } from './components/AIAssistantWidget';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
 function ProjectLayout() {
@@ -17,16 +19,19 @@ function ProjectLayout() {
     <>
       <Sidebar />
       <div className="main-content">
-        <Routes>
-          <Route index element={<Navigate to="upload" replace />} />
-          <Route path="overview" element={<ProjectPage />} />
-          <Route path="upload" element={<UploadPage />} />
-          <Route path="eda" element={<EDAPage />} />
-          <Route path="treatment" element={<TreatmentPage />} />
-          <Route path="pipeline" element={<PipelinePage />} />
-          <Route path="experiments" element={<ExperimentsPage />} />
-          <Route path="result" element={<ResultPage />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route index element={<Navigate to="upload" replace />} />
+            <Route path="overview" element={<ProjectPage />} />
+            <Route path="upload" element={<UploadPage />} />
+            <Route path="eda" element={<EDAPage />} />
+            <Route path="treatment" element={<TreatmentPage />} />
+            <Route path="pipeline" element={<PipelinePage />} />
+            <Route path="experiments" element={<ExperimentsPage />} />
+            <Route path="result" element={<ResultPage />} />
+            <Route path="drift" element={<DriftMonitoringPage />} />
+          </Routes>
+        </ErrorBoundary>
       </div>
       <AIAssistantWidget projectId={projectId} />
     </>
@@ -35,13 +40,15 @@ function ProjectLayout() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <div className="layout-main" style={{ flexDirection: 'row' }}>
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/projects/:projectId/*" element={<ProjectLayout />} />
-        </Routes>
-      </div>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <div className="layout-main">
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/projects/:projectId/*" element={<ProjectLayout />} />
+          </Routes>
+        </div>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
