@@ -4,6 +4,7 @@ from db_models.orm import (  # noqa: F401
     Experiment,
     Metric,
     PipelineConfig,
+    PredictionLog,
     Project,
     WorkflowDecision,
 )

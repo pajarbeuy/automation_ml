@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  CheckCircle2, X, RotateCcw, ChevronRight, Info, Sparkles, Bot, BarChart2
+  CheckCircle2, X, RotateCcw, ChevronRight, Info, Sparkles, Bot, BarChart2, Lightbulb
 } from 'lucide-react';
 import { listDatasets, getRecommendations, submitDecision, listDecisions, explainRecommendation, getScalingPreview } from '../api/client';
 import type { Recommendation, WorkflowDecision, ScalingPreviewData } from '../types';
@@ -13,6 +13,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   encoding: 'Encoding',
   scaling: 'Scaling',
   class_imbalance: 'Class Imbalance',
+  target_transformation: 'Target Skewness',
+  target_outliers: 'Target Outliers',
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -21,6 +23,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   encoding: 'badge-primary',
   scaling: 'badge-info',
   class_imbalance: 'badge-warning',
+  target_transformation: 'badge-primary',
+  target_outliers: 'badge-danger',
 };
 
 function ActionButton({
@@ -413,36 +417,41 @@ export function TreatmentPage() {
             }}
           >
             <div
-              className="animate-slide-up"
+              className="animate-slide-up card"
               onClick={e => e.stopPropagation()}
               style={{
-                background: '#181825', border: '1px solid #313244', borderRadius: '16px',
-                maxWidth: '850px', width: '100%', padding: '1.75rem', color: '#cdd6f4', maxHeight: '90vh', overflowY: 'auto',
-                boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+                borderRadius: '16px',
+                maxWidth: '850px',
+                width: '100%',
+                padding: '1.75rem',
+                color: 'var(--text-primary)',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                boxShadow: 'var(--neu-raised-hover)',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #313244', paddingBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-inset)', paddingBottom: '0.75rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <BarChart2 size={22} style={{ color: '#89b4fa' }} />
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>
+                  <BarChart2 size={22} style={{ color: 'var(--accent)' }} />
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
                     Visualisasi Dampak Scaling (Before vs After)
                   </h3>
                 </div>
-                <button onClick={() => setShowScalingModal(false)} style={{ background: 'none', border: 'none', color: '#a6adc8', cursor: 'pointer' }}>
+                <button onClick={() => setShowScalingModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                   <X size={20} />
                 </button>
               </div>
 
               {/* Selector Kolom Numerik */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', background: '#1e1e2e', padding: '0.75rem 1rem', borderRadius: '10px' }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#a6adc8' }}>Pilih Kolom Numerik:</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', background: 'var(--bg-inset)', padding: '0.75rem 1rem', borderRadius: '10px', boxShadow: 'var(--neu-inset-sm)' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Pilih Kolom Numerik:</label>
                 <select
                   value={selectedCol ?? ''}
                   onChange={e => setSelectedCol(e.target.value)}
-                  style={{
-                    background: '#313244', border: '1px solid #45475a', color: '#cdd6f4',
-                    padding: '0.4rem 0.8rem', borderRadius: '6px', fontSize: '0.85rem', outline: 'none',
-                  }}
+                  className="select input"
+                  style={{ width: 'auto', minWidth: '220px' }}
                 >
                   {Object.keys(scalingData).map(col => (
                     <option key={col} value={col}>{col} ({scalingData[col].scaling_action})</option>
@@ -452,80 +461,81 @@ export function TreatmentPage() {
 
               {activeColData ? (
                 <div>
-                  <div style={{ fontSize: '0.9rem', color: '#89b4fa', fontWeight: 600, marginBottom: '1rem' }}>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--accent)', fontWeight: 700, marginBottom: '1rem' }}>
                     Aksi Transformasi: <span className="badge badge-primary">{activeColData.scaling_action.replace(/_/g, ' ')}</span>
                   </div>
 
                   <div className="grid-2" style={{ gap: '1.25rem' }}>
                     {/* Cards Before Scaling */}
-                    <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '12px', padding: '1rem' }}>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#f38ba8', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1rem', boxShadow: 'var(--neu-raised-sm)' }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--danger)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span>Data Mentah (Before)</span>
-                        <span style={{ fontSize: '0.75rem', background: '#313244', padding: '0.2rem 0.5rem', borderRadius: '4px', color: '#a6adc8' }}>Raw Scale</span>
+                        <span className="badge badge-danger">Raw Scale</span>
                       </div>
 
                       <HistogramSvg
                         counts={activeColData.raw.counts}
-                        color="#f38ba8"
+                        color="var(--danger)"
                         minVal={activeColData.raw.min ?? undefined}
                         maxVal={activeColData.raw.max ?? undefined}
                       />
 
                       {/* Ringkasan Statistik Before */}
                       <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem' }}>
-                        <div style={{ background: '#181825', padding: '0.4rem 0.6rem', borderRadius: '6px' }}>
-                          <span style={{ color: '#a6adc8' }}>Mean:</span> <strong>{activeColData.raw.mean?.toFixed(2) ?? 'N/A'}</strong>
+                        <div style={{ background: 'var(--bg-inset)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border-inset)' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Mean:</span> <strong>{activeColData.raw.mean?.toFixed(2) ?? 'N/A'}</strong>
                         </div>
-                        <div style={{ background: '#181825', padding: '0.4rem 0.6rem', borderRadius: '6px' }}>
-                          <span style={{ color: '#a6adc8' }}>Std Dev:</span> <strong>{activeColData.raw.std?.toFixed(2) ?? 'N/A'}</strong>
+                        <div style={{ background: 'var(--bg-inset)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border-inset)' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Std Dev:</span> <strong>{activeColData.raw.std?.toFixed(2) ?? 'N/A'}</strong>
                         </div>
-                        <div style={{ background: '#181825', padding: '0.4rem 0.6rem', borderRadius: '6px' }}>
-                          <span style={{ color: '#a6adc8' }}>Min / Max:</span> <strong>{activeColData.raw.min?.toFixed(1)} / {activeColData.raw.max?.toFixed(1)}</strong>
+                        <div style={{ background: 'var(--bg-inset)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border-inset)' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Min / Max:</span> <strong>{activeColData.raw.min?.toFixed(1)} / {activeColData.raw.max?.toFixed(1)}</strong>
                         </div>
-                        <div style={{ background: '#181825', padding: '0.4rem 0.6rem', borderRadius: '6px' }}>
-                          <span style={{ color: '#a6adc8' }}>Skewness:</span> <strong>{activeColData.raw.skewness?.toFixed(2) ?? 'N/A'}</strong>
+                        <div style={{ background: 'var(--bg-inset)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border-inset)' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Skewness:</span> <strong>{activeColData.raw.skewness?.toFixed(2) ?? 'N/A'}</strong>
                         </div>
                       </div>
                     </div>
 
                     {/* Cards After Scaling */}
-                    <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '12px', padding: '1rem' }}>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#a6e3a1', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1rem', boxShadow: 'var(--neu-raised-sm)' }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--success)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span>Data Diskalakan (After)</span>
-                        <span style={{ fontSize: '0.75rem', background: '#313244', padding: '0.2rem 0.5rem', borderRadius: '4px', color: '#a6adc8' }}>Transformed Scale</span>
+                        <span className="badge badge-success">Transformed Scale</span>
                       </div>
 
                       <HistogramSvg
                         counts={activeColData.transformed.counts}
-                        color="#a6e3a1"
+                        color="var(--success)"
                         minVal={activeColData.transformed.min ?? undefined}
                         maxVal={activeColData.transformed.max ?? undefined}
                       />
 
                       {/* Ringkasan Statistik After */}
                       <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem' }}>
-                        <div style={{ background: '#181825', padding: '0.4rem 0.6rem', borderRadius: '6px' }}>
-                          <span style={{ color: '#a6adc8' }}>Mean:</span> <strong>{activeColData.transformed.mean?.toFixed(2) ?? 'N/A'}</strong>
+                        <div style={{ background: 'var(--bg-inset)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border-inset)' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Mean:</span> <strong>{activeColData.transformed.mean?.toFixed(2) ?? 'N/A'}</strong>
                         </div>
-                        <div style={{ background: '#181825', padding: '0.4rem 0.6rem', borderRadius: '6px' }}>
-                          <span style={{ color: '#a6adc8' }}>Std Dev:</span> <strong>{activeColData.transformed.std?.toFixed(2) ?? 'N/A'}</strong>
+                        <div style={{ background: 'var(--bg-inset)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border-inset)' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Std Dev:</span> <strong>{activeColData.transformed.std?.toFixed(2) ?? 'N/A'}</strong>
                         </div>
-                        <div style={{ background: '#181825', padding: '0.4rem 0.6rem', borderRadius: '6px' }}>
-                          <span style={{ color: '#a6adc8' }}>Min / Max:</span> <strong>{activeColData.transformed.min?.toFixed(2)} / {activeColData.transformed.max?.toFixed(2)}</strong>
+                        <div style={{ background: 'var(--bg-inset)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border-inset)' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Min / Max:</span> <strong>{activeColData.transformed.min?.toFixed(2)} / {activeColData.transformed.max?.toFixed(2)}</strong>
                         </div>
-                        <div style={{ background: '#181825', padding: '0.4rem 0.6rem', borderRadius: '6px' }}>
-                          <span style={{ color: '#a6adc8' }}>Skewness:</span> <strong>{activeColData.transformed.skewness?.toFixed(2) ?? 'N/A'}</strong>
+                        <div style={{ background: 'var(--bg-inset)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border-inset)' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Skewness:</span> <strong>{activeColData.transformed.skewness?.toFixed(2) ?? 'N/A'}</strong>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ marginTop: '1.25rem', background: '#181825', padding: '0.85rem 1.1rem', borderRadius: '10px', fontSize: '0.83rem', color: '#a6adc8', borderLeft: '4px solid #89b4fa', lineHeight: 1.6 }}>
-                    💡 <strong>Mengapa Tinggi Grafik Bar Sama?</strong> <code>Standard Scaling</code> & <code>Min-Max Scaling</code> bersifat <em>linear transformation</em>. Transformasi ini mempertahankan proporsi data (sehingga tinggi bar frekuensi di tiap bin 100% sama), tetapi <strong>mereset dan mengubah rentang nilai sumbu X</strong> (perhatikan perubahan label Min/Max di bawah grafik: <code>0.0 ~ 8.0</code> berubah menjadi <code>-2.76 ~ 7.45</code>, serta <code>Mean → -0.00</code> dan <code>Std Dev → 1.00</code>).
+                  <div style={{ marginTop: '1.25rem', background: 'var(--bg-inset)', padding: '0.85rem 1.1rem', borderRadius: '10px', fontSize: '0.83rem', color: 'var(--text-secondary)', borderLeft: '4px solid var(--info)', lineHeight: 1.6, boxShadow: 'var(--neu-inset-sm)' }}>
+                    <Lightbulb size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom', color: 'var(--warning)' }} />
+                    <strong>Mengapa Tinggi Grafik Bar Sama?</strong> <code>Standard Scaling</code> & <code>Min-Max Scaling</code> bersifat <em>linear transformation</em>. Transformasi ini mempertahankan proporsi data (sehingga tinggi bar frekuensi di tiap bin 100% sama), tetapi <strong>mereset dan mengubah rentang nilai sumbu X</strong> (perhatikan perubahan label Min/Max di bawah grafik: <code>0.0 ~ 8.0</code> berubah menjadi <code>-2.76 ~ 7.45</code>, serta <code>Mean → -0.00</code> dan <code>Std Dev → 1.00</code>).
                   </div>
                 </div>
               ) : (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#a6adc8' }}>Tidak ada data kolom numerik.</div>
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Tidak ada data kolom numerik.</div>
               )}
 
               <div style={{ textAlign: 'right', marginTop: '1.5rem' }}>
@@ -543,47 +553,53 @@ export function TreatmentPage() {
           <div
             onClick={() => setAiExplanation(null)}
             style={{
-              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 10000,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
-              backdropFilter: 'blur(4px)',
+              position: 'fixed', inset: 0,
+              background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              zIndex: 9999, padding: '1rem',
             }}
           >
             <div
-              className="animate-slide-up"
+              className="animate-slide-up card"
               onClick={e => e.stopPropagation()}
               style={{
-                background: '#181825', border: '1px solid #313244', borderRadius: '16px',
-                maxWidth: '580px', width: '100%', padding: '1.75rem', color: '#cdd6f4',
-                boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+                borderRadius: '16px',
+                maxWidth: '580px',
+                width: '100%',
+                padding: '1.75rem',
+                color: 'var(--text-primary)',
+                boxShadow: 'var(--neu-raised-hover)',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <Bot size={22} style={{ color: '#cba6f7' }} />
-                  <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>Penjelasan AI Assistant</h3>
+                  <Bot size={22} style={{ color: 'var(--accent)' }} />
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Penjelasan AI Assistant</h3>
                 </div>
-                <button onClick={() => setAiExplanation(null)} style={{ background: 'none', border: 'none', color: '#a6adc8', cursor: 'pointer' }}>
+                <button onClick={() => setAiExplanation(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                   <X size={18} />
                 </button>
               </div>
 
-              <div style={{ background: '#1e1e2e', padding: '1.1rem', borderRadius: '12px', marginBottom: '1rem', borderLeft: '4px solid #6366f1' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.95rem', color: '#cba6f7', marginBottom: '0.4rem' }}>
+              <div style={{ background: 'var(--bg-inset)', padding: '1.1rem', borderRadius: '12px', marginBottom: '1rem', borderLeft: '4px solid var(--accent)', boxShadow: 'var(--neu-inset-sm)' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--accent)', marginBottom: '0.4rem' }}>
                   {aiExplanation.headline || 'Analisis Preprocessing'}
                 </div>
-                <p style={{ fontSize: '0.875rem', color: '#cdd6f4', lineHeight: 1.6, margin: 0 }}>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', lineHeight: 1.6, margin: 0 }}>
                   {aiExplanation.detailed_explanation || 'Penjelasan tidak tersedia.'}
                 </p>
               </div>
 
               {Array.isArray(aiExplanation.key_evidence) && aiExplanation.key_evidence.length > 0 && (
                 <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ fontSize: '0.78rem', color: '#a6adc8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', fontWeight: 600 }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', fontWeight: 700 }}>
                     Bukti Statistik Kunci (Evidence)
                   </div>
                   <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                     {aiExplanation.key_evidence.map((ev: string, idx: number) => (
-                      <span key={idx} style={{ background: '#313244', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.78rem', border: '1px solid #45475a' }}>
+                      <span key={idx} style={{ background: 'var(--bg-card)', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.78rem', border: '1px solid var(--border)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-primary)' }}>
                         {ev}
                       </span>
                     ))}
@@ -592,8 +608,8 @@ export function TreatmentPage() {
               )}
 
               {aiExplanation.alternative_rationale && (
-                <div style={{ background: '#181825', border: '1px dashed #313244', padding: '0.75rem 1rem', borderRadius: '8px', fontSize: '0.8rem', color: '#a6adc8', marginBottom: '1rem' }}>
-                  <strong style={{ color: '#89b4fa' }}>Pertimbangan Alternatif:</strong>
+                <div style={{ background: 'var(--bg-inset)', border: '1px dashed var(--border-inset)', padding: '0.75rem 1rem', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                  <strong style={{ color: 'var(--accent)' }}>Pertimbangan Alternatif:</strong>
                   <div style={{ marginTop: '0.25rem', whiteSpace: 'pre-line' }}>{aiExplanation.alternative_rationale}</div>
                 </div>
               )}
@@ -610,7 +626,9 @@ export function TreatmentPage() {
 
         {filtered.length === 0 && (
           <div className="empty-state">
-            <div className="empty-state-icon">✅</div>
+            <div className="empty-state-icon">
+              <CheckCircle2 size={48} style={{ color: 'var(--success)' }} />
+            </div>
             <h3>No issues found</h3>
             <p>Dataset looks clean for this category.</p>
           </div>

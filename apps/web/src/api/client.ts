@@ -12,12 +12,44 @@ import type {
   ExperimentCreate,
   CandidateSchemaResponse,
   PredictResponse,
+  DriftReportResponse,
+  SimulateTrafficResponse,
 } from '../types';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '',
   headers: { 'Content-Type': 'application/json' },
 });
+
+// Helper function to extract human-readable error messages from Axios / FastAPI
+export function getErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data;
+    if (data?.detail) {
+      if (typeof data.detail === 'string') return data.detail;
+      if (Array.isArray(data.detail)) {
+        return data.detail
+          .map((item: any) => item.msg || item.message || JSON.stringify(item))
+          .join(', ');
+      }
+    }
+    if (data?.message) return String(data.message);
+    if (error.message) return error.message;
+  }
+  if (error instanceof Error) return error.message;
+  return 'Terjadi kesalahan pada sistem.';
+}
+
+api.interceptors.response.use(
+  response => response,
+  error => {
+    const msg = getErrorMessage(error);
+    if (error && typeof error === 'object') {
+      (error as any).userMessage = msg;
+    }
+    return Promise.reject(error);
+  }
+);
 
 // ─── Projects ────────────────────────────────────────────────
 export const createProject = (data: { name: string; description?: string; task_type?: string }) =>
@@ -152,5 +184,15 @@ export const predictBatchCsv = (projectId: string, file: File) => {
     responseType: 'blob',
   }).then(r => r.data);
 };
+
+// ─── Model Drift Monitoring ──────────────────────────────────
+export const getProjectDrift = (projectId: string) =>
+  api.get<DriftReportResponse>(`/api/projects/${projectId}/drift`).then(r => r.data);
+
+export const simulateDriftTraffic = (projectId: string, driftType: 'normal' | 'drifted' = 'normal', samples = 30) =>
+  api.post<SimulateTrafficResponse>(`/api/projects/${projectId}/drift/simulate`, { drift_type: driftType, samples }).then(r => r.data);
+
+export const clearDriftLogs = (projectId: string) =>
+  api.delete<{ status: string; deleted_count: number; message: string }>(`/api/projects/${projectId}/drift/logs`).then(r => r.data);
 
 export default api;

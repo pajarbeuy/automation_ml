@@ -545,27 +545,24 @@ export function ResultPage() {
         </p>
 
         {/* Tab Navigation */}
-        <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+        <div className="tabs" style={{ marginBottom: '1.25rem' }}>
           <button
             type="button"
-            className={`btn ${servingTab === 'single' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ fontSize: '0.78rem', padding: '0.4rem 0.9rem' }}
+            className={`tab ${servingTab === 'single' ? 'active' : ''}`}
             onClick={() => setServingTab('single')}
           >
             <Play size={13} /> Single Prediction
           </button>
           <button
             type="button"
-            className={`btn ${servingTab === 'batch' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ fontSize: '0.78rem', padding: '0.4rem 0.9rem' }}
+            className={`tab ${servingTab === 'batch' ? 'active' : ''}`}
             onClick={() => setServingTab('batch')}
           >
             <Upload size={13} /> Batch CSV Prediction
           </button>
           <button
             type="button"
-            className={`btn ${servingTab === 'api' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ fontSize: '0.78rem', padding: '0.4rem 0.9rem' }}
+            className={`tab ${servingTab === 'api' ? 'active' : ''}`}
             onClick={() => setServingTab('api')}
           >
             <Terminal size={13} /> API Code Snippets
@@ -681,7 +678,9 @@ export function ResultPage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
                   <div style={{ fontSize: '2rem', fontWeight: 800, color: '#a5b4fc' }}>
-                    {predictionResult.prediction}
+                    {typeof predictionResult.prediction === 'number'
+                      ? predictionResult.prediction.toLocaleString(undefined, { maximumFractionDigits: 4 })
+                      : predictionResult.prediction}
                   </div>
                   {predictionResult.confidence !== undefined && (
                     <span style={{
@@ -692,12 +691,66 @@ export function ResultPage() {
                       borderRadius: 20,
                       fontSize: '0.82rem',
                       fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
                     }}>
+                      <CheckCircle2 size={13} />
                       {(predictionResult.confidence * 100).toFixed(1)}% Confidence
+                      {predictionResult.confidence_metric ? ` (${predictionResult.confidence_metric})` : ''}
                     </span>
                   )}
                 </div>
 
+                {/* Regression Uncertainty & Prediction Interval */}
+                {predictionResult.margin_of_error !== undefined && (
+                  <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '0.85rem' }}>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                      gap: '0.75rem',
+                      marginBottom: '0.65rem',
+                    }}>
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: 8,
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                      }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>
+                          Margin of Error (&plusmn; MAE)
+                        </div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#e0e7ff' }}>
+                          &plusmn; {predictionResult.margin_of_error.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: 8,
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                      }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>
+                          Rentang Estimasi (Expected Range)
+                        </div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#818cf8' }}>
+                          {predictionResult.interval_lower?.toLocaleString(undefined, { maximumFractionDigits: 2 })} &mdash; {predictionResult.interval_upper?.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                      Prediksi model regresi tidak bersifat mutlak 100%. Berdasarkan evaluasi cross-validation, model memiliki daya jelas variansi keyakinan R&sup2; sebesar{' '}
+                      <strong style={{ color: '#a5b4fc' }}>
+                        {predictionResult.confidence !== undefined ? (predictionResult.confidence * 100).toFixed(1) : '—'}%
+                      </strong>{' '}
+                      dengan estimasi rata-rata deviasi &plusmn;{predictionResult.margin_of_error.toLocaleString(undefined, { maximumFractionDigits: 2 })}.
+                    </div>
+                  </div>
+                )}
+
+                {/* Classification Class Probabilities */}
                 {predictionResult.probabilities && (
                   <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '0.75rem' }}>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>

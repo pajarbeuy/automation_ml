@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from database import get_db
-from db_models import Dataset, WorkflowDecision
+from db_models import Dataset, WorkflowDecision, Project
 
 from routers.utils import features_from_profile_json, dataset_profile_from_json
 
@@ -38,10 +38,13 @@ def get_recommendations(dataset_id: str, db: Session = Depends(get_db)):
     if not dataset.profile_json:
         raise HTTPException(status_code=400, detail="Dataset not yet profiled")
 
+    project = db.query(Project).filter(Project.id == dataset.project_id).first()
+    task_type = project.task_type if (project and project.task_type) else "classification"
+
     profile = dataset_profile_from_json(dataset.profile_json)
     df = pd.read_csv(dataset.storage_uri)
 
-    recs = generate_recommendations(df, profile)
+    recs = generate_recommendations(df, profile, task_type=task_type)
     return [rec.to_dict() for rec in recs]
 
 

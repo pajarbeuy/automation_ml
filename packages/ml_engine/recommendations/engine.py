@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pandas as pd
+from scipy import stats
 
 from profiling.profiler import DatasetProfile
 from detection.missing_detector import detect_missing
@@ -404,6 +405,68 @@ def _recommend_imbalance(
     )
 
 
+def _recommend_target_skewness(
+    target_col: str,
+    skewness: float,
+    min_val: float,
+    max_val: float,
+) -> Recommendation:
+    """Rekomendasi penanganan kemiringan distribusi (skewness) pada target regresi."""
+    is_non_negative = min_val >= 0
+    recommended_action = "log1p_transform" if is_non_negative else "yeo_johnson_transform"
+    alternatives = ["yeo_johnson_transform", "keep_original"] if is_non_negative else ["keep_original"]
+
+    evidence = [
+        f"target_skewness={round(skewness, 2)}",
+        f"target_min={round(min_val, 2)}",
+        f"target_max={round(max_val, 2)}",
+    ]
+
+    rationale = (
+        f"Target regresi '{target_col}' mengalami kemiringan distribusi yang signifikan (skewness = {round(skewness, 2)}). "
+        f"Menerapkan transformasi '{recommended_action}' dapat menstabilkan variansi residual dan mempermudah konvergensi model regresi."
+    )
+
+    return Recommendation(
+        id=str(uuid.uuid4()),
+        category="target_transformation",
+        column=target_col,
+        recommended_action=recommended_action,
+        confidence=0.85,
+        score=75.0,
+        evidence=evidence,
+        rationale=rationale,
+        alternatives=alternatives,
+    )
+
+
+def _recommend_target_outliers(
+    target_col: str,
+    outlier_rate: float,
+    outlier_count: int,
+) -> Recommendation:
+    """Rekomendasi mitigasi outlier ekstrim pada target regresi."""
+    evidence = [
+        f"target_outlier_rate={round(outlier_rate * 100, 1)}%",
+        f"outlier_count={outlier_count}",
+    ]
+    rationale = (
+        f"Ditemukan {round(outlier_rate * 100, 1)}% data ekstrim (outlier) pada target '{target_col}'. "
+        "Disarankan memprioritaskan model regresi yang tangguh (robust) terhadap outlier seperti Random Forest, Gradient Boosting, atau Ridge."
+    )
+    return Recommendation(
+        id=str(uuid.uuid4()),
+        category="target_outliers",
+        column=target_col,
+        recommended_action="use_robust_models",
+        confidence=0.75,
+        score=65.0,
+        evidence=evidence,
+        rationale=rationale,
+        alternatives=["clip_target_iqr", "keep_original"],
+    )
+
+
 # =============================================================================
 # 7. FUNGSI UTAMA GENERASI REKOMENDASI
 # =============================================================================
@@ -411,13 +474,16 @@ def _recommend_imbalance(
 def generate_recommendations(
     df: pd.DataFrame,
     profile: DatasetProfile,
+    task_type: str = "classification",
 ) -> list[Recommendation]:
     """
-    Fungsi Utama: Menghasilkan seluruh daftar rekomendasi preprocessing untuk dataset.
+    Fungsi Utama: Menghasilkan seluruh daftar rekomendasi preprocessing untuk dataset
+    secara task-aware (membedakan klasifikasi vs regresi).
 
     Args:
         df: Dataframe dataset asli (read-only).
         profile: Objek DatasetProfile hasil profiling.
+        task_type: Jenis task ("classification" atau "regression"). Defaults to "classification".
 
     Returns:
         Daftar objek Recommendation yang diurutkan dari skor tertinggi ke terendah.
@@ -481,15 +547,52 @@ def generate_recommendations(
             )
             recommendations.append(rec)
 
-    # 5. Analisis Ketidakseimbangan Kelas Target
-    imbalance_report = detect_imbalance(profile.class_distribution)
-    if imbalance_report and imbalance_report.is_imbalanced:
-        rec = _recommend_imbalance(
-            minority_class=imbalance_report.minority_class,
-            minority_prop=imbalance_report.minority_proportion,
-            imbalance_ratio=imbalance_report.imbalance_ratio,
-        )
-        recommendations.append(rec)
+    # 5. Analisis Target Spesifik Task (Task-Aware Processing)
+    if task_type == "regression":
+        if profile.target and profile.target in df.columns:
+            target_series = pd.to_numeric(df[profile.target], errors="coerce").dropna()
+            if len(target_series) >= 5:
+                # 5.1 Analisis Kemiringan Distribusi (Skewness) Target
+                try:
+                    skew_val = float(stats.skew(target_series))
+                    if abs(skew_val) >= 1.2:
+                        rec = _recommend_target_skewness(
+                            target_col=profile.target,
+                            skewness=skew_val,
+                            min_val=float(target_series.min()),
+                            max_val=float(target_series.max()),
+                        )
+                        recommendations.append(rec)
+                except Exception:
+                    pass
+
+                # 5.2 Analisis Outlier Ekstrim pada Target
+                try:
+                    q25 = float(target_series.quantile(0.25))
+                    q75 = float(target_series.quantile(0.75))
+                    iqr = q75 - q25
+                    if iqr > 0:
+                        outliers = ((target_series < q25 - 1.5 * iqr) | (target_series > q75 + 1.5 * iqr)).sum()
+                        outlier_rate = float(outliers / len(target_series))
+                        if outlier_rate >= 0.03:
+                            rec = _recommend_target_outliers(
+                                target_col=profile.target,
+                                outlier_rate=outlier_rate,
+                                outlier_count=int(outliers),
+                            )
+                            recommendations.append(rec)
+                except Exception:
+                    pass
+    else:
+        # Task Classification: Analisis Ketidakseimbangan Kelas Target
+        imbalance_report = detect_imbalance(profile.class_distribution)
+        if imbalance_report and imbalance_report.is_imbalanced:
+            rec = _recommend_imbalance(
+                minority_class=imbalance_report.minority_class,
+                minority_prop=imbalance_report.minority_proportion,
+                imbalance_ratio=imbalance_report.imbalance_ratio,
+            )
+            recommendations.append(rec)
 
     # Urutkan berdasarkan skor terbesar ke terkecil
     recommendations.sort(key=lambda r: r.score, reverse=True)

@@ -1,22 +1,30 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { GitBranch, Play, CheckCircle2, AlertTriangle, ChevronRight, RefreshCw } from 'lucide-react';
+import {
+  GitBranch, Play, CheckCircle2, AlertTriangle, ChevronRight, RefreshCw,
+  FileSpreadsheet, Wrench, Binary, Sliders, Target, Cpu, Cog, XCircle
+} from 'lucide-react';
 import { generatePipeline, getPipeline, validatePipeline } from '../api/client';
 import type { PipelineConfig, PipelineValidation } from '../types';
 
-const STEP_ICONS: Record<string, string> = {
-  Raw: '📄',
-  Imputation: '🔧',
-  Encoding: '🔤',
-  Scaling: '📊',
-  'Feature selection': '🎯',
-  Model: '🤖',
-};
+function getStepIcon(label: string) {
+  switch (label) {
+    case 'Raw': return <FileSpreadsheet size={18} style={{ color: 'var(--text-secondary)' }} />;
+    case 'Imputation': return <Wrench size={18} style={{ color: 'var(--warning)' }} />;
+    case 'Encoding': return <Binary size={18} style={{ color: 'var(--info)' }} />;
+    case 'Scaling': return <Sliders size={18} style={{ color: 'var(--accent-hover)' }} />;
+    case 'Feature selection': return <Target size={18} style={{ color: 'var(--accent)' }} />;
+    case 'Model': return <Cpu size={18} style={{ color: 'var(--success)' }} />;
+    default: return <Cog size={18} style={{ color: 'var(--text-muted)' }} />;
+  }
+}
 
 function PipelineNode({ label, sublabel, color }: { label: string; sublabel?: string; color?: string }) {
   return (
     <div className="pipeline-node" style={{ borderLeftColor: color, borderLeftWidth: 3 }}>
-      <span style={{ fontSize: '1.25rem' }}>{STEP_ICONS[label] ?? '⚙️'}</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, borderRadius: 8, background: 'var(--bg-inset)', boxShadow: 'var(--neu-inset-sm)', flexShrink: 0 }}>
+        {getStepIcon(label)}
+      </div>
       <div>
         <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{label}</div>
         {sublabel && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{sublabel}</div>}
@@ -187,10 +195,14 @@ export function PipelinePage() {
                     {validation.valid ? 'Pipeline is valid' : 'Validation failed'}
                   </div>
                   {validation.warnings.map(w => (
-                    <div key={w} style={{ fontSize: '0.8rem', opacity: 0.85 }}>⚠ {w}</div>
+                    <div key={w} style={{ fontSize: '0.8rem', opacity: 0.9, display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.2rem' }}>
+                      <AlertTriangle size={13} style={{ flexShrink: 0 }} /> {w}
+                    </div>
                   ))}
                   {validation.errors.map(e => (
-                    <div key={e} style={{ fontSize: '0.8rem' }}>✕ {e}</div>
+                    <div key={e} style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.2rem' }}>
+                      <XCircle size={13} style={{ flexShrink: 0 }} /> {e}
+                    </div>
                   ))}
                 </div>
               </div>

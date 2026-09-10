@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Brain, FolderOpen, Trash2, ChevronRight, Zap, Clock, Target, TrendingUp } from 'lucide-react';
+import { Plus, Brain, FolderOpen, Trash2, ChevronRight, Zap, Clock, Target, TrendingUp, CheckCircle2 } from 'lucide-react';
 import { listProjects, createProject, deleteProject } from '../api/client';
 import type { Project } from '../types';
 
@@ -235,50 +235,96 @@ export function DashboardPage() {
               />
             </div>
 
-            <div className="form-group" style={{ marginBottom: '1rem' }}>
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
               <label className="label">Task Type (Jenis Tugas ML) *</label>
               <div className="grid-2" style={{ gap: '0.75rem' }}>
-                <button
-                  type="button"
+                {/* Classification Radio Card */}
+                <div
                   onClick={() => setForm(f => ({ ...f, taskType: 'classification' }))}
                   style={{
-                    padding: '0.75rem',
-                    borderRadius: '8px',
-                    border: form.taskType === 'classification' ? '2px solid #89b4fa' : '1px solid #313244',
-                    background: form.taskType === 'classification' ? 'rgba(137,180,250,0.1)' : '#181825',
-                    color: '#cdd6f4',
+                    padding: '0.85rem 1rem',
+                    borderRadius: '10px',
+                    border: form.taskType === 'classification'
+                      ? '2px solid var(--accent)'
+                      : '1.5px solid var(--border)',
+                    background: form.taskType === 'classification'
+                      ? 'rgba(67, 56, 202, 0.08)'
+                      : 'var(--bg-card)',
+                    boxShadow: form.taskType === 'classification'
+                      ? '0 0 0 1px var(--accent), 0 2px 8px rgba(67, 56, 202, 0.15)'
+                      : 'var(--neu-raised-sm)',
                     cursor: 'pointer',
-                    textAlign: 'left',
+                    transition: 'all 0.15s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#89b4fa', fontSize: '0.9rem' }}>
-                    <Target size={16} /> Classification
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <Target size={16} color={form.taskType === 'classification' ? 'var(--accent)' : 'var(--text-muted)'} />
+                      <span style={{
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        color: form.taskType === 'classification' ? 'var(--accent)' : 'var(--text-primary)',
+                      }}>
+                        Classification
+                      </span>
+                    </div>
+                    {form.taskType === 'classification' ? (
+                      <CheckCircle2 size={16} color="var(--accent)" />
+                    ) : (
+                      <div style={{ width: 14, height: 14, borderRadius: '50%', border: '1.5px solid #94a3b8' }} />
+                    )}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#a6adc8', marginTop: '0.25rem' }}>
-                    Prediksi kategori/label (misal: Survived/Dead, Churn/Stay)
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                    Prediksi kategori / label diskrit (misal: Survived/Dead, Churn/Stay)
                   </div>
-                </button>
+                </div>
 
-                <button
-                  type="button"
+                {/* Regression Radio Card */}
+                <div
                   onClick={() => setForm(f => ({ ...f, taskType: 'regression' }))}
                   style={{
-                    padding: '0.75rem',
-                    borderRadius: '8px',
-                    border: form.taskType === 'regression' ? '2px solid #a6e3a1' : '1px solid #313244',
-                    background: form.taskType === 'regression' ? 'rgba(166,227,161,0.1)' : '#181825',
-                    color: '#cdd6f4',
+                    padding: '0.85rem 1rem',
+                    borderRadius: '10px',
+                    border: form.taskType === 'regression'
+                      ? '2px solid var(--accent)'
+                      : '1.5px solid var(--border)',
+                    background: form.taskType === 'regression'
+                      ? 'rgba(67, 56, 202, 0.08)'
+                      : 'var(--bg-card)',
+                    boxShadow: form.taskType === 'regression'
+                      ? '0 0 0 1px var(--accent), 0 2px 8px rgba(67, 56, 202, 0.15)'
+                      : 'var(--neu-raised-sm)',
                     cursor: 'pointer',
-                    textAlign: 'left',
+                    transition: 'all 0.15s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#a6e3a1', fontSize: '0.9rem' }}>
-                    <TrendingUp size={16} /> Regression
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <TrendingUp size={16} color={form.taskType === 'regression' ? 'var(--accent)' : 'var(--text-muted)'} />
+                      <span style={{
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        color: form.taskType === 'regression' ? 'var(--accent)' : 'var(--text-primary)',
+                      }}>
+                        Regression
+                      </span>
+                    </div>
+                    {form.taskType === 'regression' ? (
+                      <CheckCircle2 size={16} color="var(--accent)" />
+                    ) : (
+                      <div style={{ width: 14, height: 14, borderRadius: '50%', border: '1.5px solid #94a3b8' }} />
+                    )}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#a6adc8', marginTop: '0.25rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
                     Prediksi angka kontinu (misal: Harga Rumah, Usia, Gaji)
                   </div>
-                </button>
+                </div>
               </div>
             </div>
 

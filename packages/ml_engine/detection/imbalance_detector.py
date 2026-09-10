@@ -20,7 +20,7 @@ def detect_imbalance(class_distribution: dict[str, float]) -> ImbalanceReport | 
     Detect class imbalance from the class distribution dict.
     Returns None if only one class exists.
     """
-    if len(class_distribution) < 2:
+    if len(class_distribution) < 2 or len(class_distribution) > 20:
         return None
 
     sorted_classes = sorted(class_distribution.items(), key=lambda x: x[1])

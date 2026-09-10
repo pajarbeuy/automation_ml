@@ -37,3 +37,15 @@ This file records architectural and product decisions.
 **Decision:** Classification is the first supported task.
 
 **Reason:** It provides a constrained but rich test bed for preprocessing, imbalance, metrics, and model comparison.
+
+## ADR-007: Task-aware preprocessing recommendation engine
+
+**Decision:** The recommendation engine strictly differentiates between `classification` and `regression` tasks.
+
+**Reason:** Concepts such as class imbalance, minority classes, and SMOTE are mathematically inapplicable to continuous numerical targets. For regression targets, the engine replaces class imbalance with continuous target skewness detection (log1p/Yeo-Johnson transformation) and target outlier detection (robust regressors / IQR clipping).
+
+## ADR-008: Confidence and uncertainty quantification for regression serving
+
+**Decision:** In addition to point estimates, regression model serving provides $R^2$ explained variance as model confidence, $\pm\text{MAE}$ as margin of error, and estimated prediction intervals $[\text{pred} - \text{MAE}, \text{pred} + \text{MAE}]$.
+
+**Reason:** Unlike classification models that output softmax class probabilities, continuous regression models output single scalar point predictions. Without explicit error margins and variance-explained indicators, users may incorrectly assume the model output is 100% exact and infallible. Providing confidence metrics and prediction intervals communicates statistical uncertainty clearly.

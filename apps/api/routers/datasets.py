@@ -47,6 +47,9 @@ async def upload_dataset(
         raise HTTPException(status_code=404, detail="Project not found")
 
     content = await file.read()
+    if not content or len(content.strip()) == 0:
+        raise HTTPException(status_code=400, detail="File CSV kosong. Silakan upload file CSV yang valid.")
+
     content_hash = _file_hash(content)
 
     # Persist raw CSV (immutable — never modified)
@@ -57,16 +60,42 @@ async def upload_dataset(
     with open(dest, "wb") as f:
         f.write(content)
 
-    # Parse and profile
+    # Parse CSV dengan toleransi delimiter
     try:
         df = pd.read_csv(str(dest))
+        if len(df.columns) == 1 and any(sep in str(df.columns[0]) for sep in [";", "\t"]):
+            df = pd.read_csv(str(dest), sep=None, engine="python")
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {exc}")
+        raise HTTPException(status_code=400, detail=f"Gagal mem-parsing file CSV: {exc}")
+
+    if df.empty or len(df) == 0:
+        raise HTTPException(status_code=400, detail="File CSV tidak memiliki baris data (hanya header atau kosong).")
+
+    if len(df) < 5:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dataset memiliki terlalu sedikit baris data ({len(df)} baris). Minimal diperlukan 5 baris data untuk melatih model dan cross-validation.",
+        )
 
     if target_column not in df.columns:
         raise HTTPException(
             status_code=400,
             detail=f"Target column '{target_column}' not found. Available: {list(df.columns)}",
+        )
+
+    clean_target = df[target_column].dropna()
+    if len(clean_target) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Kolom target '{target_column}' tidak memiliki data (seluruh nilainya kosong atau NaN).",
+        )
+
+    # Validasi kelas target untuk tugas klasifikasi
+    n_classes = clean_target.nunique()
+    if project.task_type == "classification" and n_classes <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Kolom target '{target_column}' hanya memiliki {n_classes} kelas unik. Model klasifikasi membutuhkan minimal 2 kelas berbeda.",
         )
 
     try:

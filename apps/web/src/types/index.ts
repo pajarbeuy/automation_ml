@@ -243,7 +243,11 @@ export interface CandidateSchemaResponse {
 export interface PredictionResult {
   prediction: string | number;
   confidence?: number;
+  confidence_metric?: string;
   probabilities?: Record<string, number>;
+  margin_of_error?: number;
+  interval_lower?: number;
+  interval_upper?: number;
 }
 
 export interface PredictResponse {
@@ -253,5 +257,49 @@ export interface PredictResponse {
   model_name: string;
   task_type: string;
   target_column: string;
+}
+
+// ─── Model Drift Monitoring Types ─────────────────────────────
+export interface DriftDistributionPoint {
+  bin: string;
+  baseline_pct: number;
+  current_pct: number;
+}
+
+export interface FeatureDriftDetail {
+  feature_name: string;
+  dtype: 'numeric' | 'categorical';
+  test_name: string;
+  statistic: number;
+  p_value: number | null;
+  threshold: number;
+  wasserstein_distance?: number;
+  baseline_mean?: number;
+  current_mean?: number;
+  baseline_std?: number;
+  current_std?: number;
+  drift_detected: boolean;
+  status: 'STABLE' | 'MODERATE' | 'DRIFT' | 'INSUFFICIENT_DATA';
+  distribution_chart: DriftDistributionPoint[];
+}
+
+export interface DriftReportResponse {
+  project_id?: string;
+  status: 'HEALTHY' | 'WARNING' | 'DRIFT_DETECTED' | 'INSUFFICIENT_DATA';
+  total_predictions_logged: number;
+  min_required?: number;
+  monitored_features_count: number;
+  drifted_features_count: number;
+  drift_share: number;
+  feature_details: FeatureDriftDetail[];
+  message?: string;
+  last_prediction_at?: string | null;
+}
+
+export interface SimulateTrafficResponse {
+  status: string;
+  simulated_samples: number;
+  drift_type: 'normal' | 'drifted';
+  message: string;
 }
 

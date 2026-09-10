@@ -306,9 +306,9 @@ pytest tests/ -v
 
 ---
 
-*Terakhir diupdate: 2026-09-09*
+*Terakhir diupdate: 2026-09-11*
 *Phase selesai: 0, 1, 2, 3, 4, 5, 6, 7, 8 (Production: Live Serving & Containerization)*
-*Fitur Tambahan Teruji (60 Pytest Tests 100% Passed):*
+*Fitur Tambahan Teruji (79 Pytest Tests 100% Passed):*
 - [x] Task Regresi & Metric Cards (`R²`, `MAE`, `MSE`, `RMSE`) + Actual vs Predicted Scatter Plot (`ResultPage.tsx`)
 - [x] Automated Feature Engineering (`AutoFeatureEngineer` log1p skewness & numeric interaction generator)
 - [x] Hyperparameter Optimization Engine (`tuner.py` + `POST /api/projects/{id}/experiments/tune` + UI Trials Modal)
@@ -320,4 +320,35 @@ pytest tests/ -v
 - [x] Model Serving & Live Prediction API (`inference.py` & `routers/serving.py` - Menerima raw JSON input tanpa perlu scaling/encoding manual, mendukung Single Prediction & Batch CSV Prediction)
 - [x] Live Inference Playground UI (`ResultPage.tsx` - Form input dinamis berdasarkan skema fitur, output klasifikasi dengan confidence / regresi dengan nilai kontinu, upload batch CSV, dan generator snippet cURL / Python)
 - [x] WSL Docker Containerization (`apps/api/Dockerfile`, `apps/web/Dockerfile`, `apps/web/nginx.conf`, `docker-compose.yml`, `.dockerignore`)
+- [x] Neumorphism (Soft UI) Design System & Lucide Icons Overhaul (`apps/web/src/index.css`, seluruh komponen & halaman - Menerapkan tema **Soft Light Clay Neumorphism** tanpa gradasi berlebih, shadow diperhalus tanpa kesan berlebihan/bengkak, kartu berukuran serasi & seimbang, logo otak solid purple `#7c3aed`, navigasi responsif tablet/mobile dengan hamburger drawer, serta eliminasi 100% Unicode emoji menjadi semantic SVG icons dari `lucide-react`)
+- [x] End-to-End Error Handling Architecture (`ErrorBoundary.tsx` frontend error boundary, Axios response interceptor di `client.ts` untuk unwrap detail validasi Pydantic/FastAPI, dan FastAPI global exception handler di `main.py`)
+- [x] Robustness & Edge-Case Hardening (`serving/inference.py`, `routers/serving.py`, `routers/datasets.py`, `test_robustness_serving.py`, `test_robustness_datasets.py`):
+  - Validasi payload kosong (`{}` / `[]` / empty DataFrame) menghasilkan HTTP 422 deskriptif tanpa crash 500.
+  - Skema inferensi mendeteksi kolom fitur yang hilang (*missing features*) dan melaporkan daftar kolom yang kurang secara spesifik.
+  - Deteksi tipe data tidak valid (teks pada kolom numerik) menghasilkan pesan error yang ramah pengguna.
+  - Toleransi nilai kategori baru (*unseen categories*) di seluruh encoder tanpa exception.
+  - Toleransi nilai `null`/`NaN` pada inferensi langsung berkat automatic imputer step pada pipeline.
+  - Deteksi delimiter fleksibel pada upload CSV (koma `,`, titik-koma `;`, tab `\t`).
+  - Pre-flight check kolom target: Penolakan dataset klasifikasi dengan 1 kelas unik (*constant target*) atau target yang 100% kosong dengan HTTP 400.
+  - Validasi jumlah baris minimal (minimal 5 baris) untuk mencegah kegagalan pembagian Cross-Validation.
+- [x] Native Model & Data Drift Monitoring Engine (`packages/ml_engine/monitoring/drift_detector.py`, `apps/api/routers/monitoring.py`, `apps/api/db_models/orm.py`, `apps/web/src/pages/DriftMonitoringPage.tsx`):
+  - Pencatatan log inferensi asinkron (`PredictionLog`) pada `POST /predict` dan `POST /predict/batch-csv` tanpa menambah latensi respons klien (zero latency overhead).
+  - Algoritma uji statistik KS-Test (Kolmogorov-Smirnov) & Wasserstein Distance untuk continuous numerical features.
+  - Algoritma Population Stability Index (PSI) untuk categorical features.
+  - Agregasi kesehatan model: `HEALTHY` (Green, <50% drift), `WARNING` (Yellow, moderate shift), `DRIFT_DETECTED` (Red, >=50% features drift).
+  - API Traffic Simulator (`POST /api/projects/{id}/drift/simulate`) untuk menyimulasikan data produksi 'Normal' vs 'Drifted' secara instan.
+  - Neumorphic Drift Monitoring Dashboard di React frontend lengkap dengan banner status kesehatan, kartu metrik, tabel per-fitur, dan modal visualisasi kurva distribusi ganda (*Baseline vs Production*) via Recharts.
+- [x] Task-Aware Recommendations & Continuous Target EDA Charting (`packages/ml_engine/recommendations/engine.py`, `apps/api/routers/recommendations.py`, `apps/web/src/pages/EDAPage.tsx`):
+  - Target EDA Tab: Menampilkan Continuous Distribution Histogram & ringkasan statistik (Mean, Median, Std, Skewness, Kurtosis, Min/Max) alih-alih pie chart untuk target regresi (menghilangkan glik "rainbow UFO pie chart").
+  - Menghapus anomali rekomendasi "Class Imbalance" pada task regresi.
+  - Menambahkan rekomendasi perlakuan target regresi yang valid: `Target Skewness` (`log1p_transform` / `yeo_johnson_transform`) dan `Target Outliers` (`use_robust_models` / `clip_target_iqr`).
+- [x] Toleransi Kolom Dropped pada Model Serving (`packages/ml_engine/serving/inference.py`, `apps/api/routers/serving.py`):
+  - Skema inferensi live hanya mewajibkan fitur yang aktif digunakan transformer (bukan remainder/dropped columns seperti `date` atau `street`).
+  - Kolom dropped otomatis diisi dengan `NaN` sebelum prediktor dieksekusi sehingga Scikit-Learn tidak menolak input.
+- [x] Estimasi Keyakinan & Uncertainty Quantification pada Model Regresi (`packages/ml_engine/serving/inference.py`, `apps/api/routers/serving.py`, `apps/web/src/pages/ResultPage.tsx`, `apps/web/src/types/index.ts`):
+  - Live Model Output menyajikan persentase keyakinan model regresi berbasis $R^2$ Score dari evaluasi Cross-Validation.
+  - Kartu estimasi ketidakpastian: Margin of Error ($\pm\text{MAE}$) dan Rentang Estimasi (*Prediction Range* $[\text{pred} - \text{MAE}, \text{pred} + \text{MAE}]$) untuk mencegah salah paham bahwa prediksi bernilai 100% mutlak.
+  - Otomatis menyertakan kolom `confidence`, `margin_of_error`, `interval_lower`, dan `interval_upper` pada ekspor file CSV hasil Batch Prediction.
+
+
 
