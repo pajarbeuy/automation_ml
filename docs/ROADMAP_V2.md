@@ -241,7 +241,7 @@ The system must allow the user to override automatic task detection.
 -   [x] Target missing values
 -   [x] Target cardinality
 -   [x] Target constant-value detection
--   [ ] Target leakage detection
+-   [x] Target leakage detection
 
 ### Classification Target
 
@@ -628,7 +628,7 @@ Support:
 -   [x] Fit preprocessing only on training data
 -   [x] Prevent test-set statistics from entering preprocessing
 -   [ ] Prevent future data leakage
--   [ ] Prevent target leakage
+-   [x] Prevent target leakage
 -   [x] Validate pipeline graph
 
 ## 3.8 Pipeline Preview

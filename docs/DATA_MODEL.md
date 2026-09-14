@@ -62,12 +62,30 @@
 - storage_uri
 - checksum
 
+### PipelineConfig
+- id
+- project_id
+- config_json
+- pipeline_hash
+- created_at
+- updated_at
+
+### PredictionLog
+- id
+- project_id
+- experiment_id
+- features_json
+- prediction_result
+- created_at
+
 ## Relationships
 
 ```text
 Project
  ├── Dataset
  ├── WorkflowDecision
+ ├── PipelineConfig
+ ├── PredictionLog
  └── Experiment
        ├── Metric
        └── Artifact

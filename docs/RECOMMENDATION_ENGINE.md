@@ -74,12 +74,62 @@ Signals:
 - outliers
 - distribution
 
-### Class imbalance
+### Class imbalance (Classification Only)
 
 Signals:
 - minority class proportion
 - imbalance ratio
 - metric selection
+- *Note:* Strictly marked as `NOT_APPLICABLE` and omitted for regression tasks.
+
+### Target Skewness & Outliers (Regression Only)
+
+Signals:
+- target skewness magnitude ($|\text{skew}| > 1.0$)
+- minimum target value ($\ge 0$ for `log1p_transform`, general for `yeo_johnson_transform`)
+- target outlier rate ($> 3\%$ with heavy tails)
+- treatments: robust models (`HuberRegressor`, `Ridge`, `HistGradientBoostingRegressor`) and IQR target clipping
+
+### Data Leakage (Priority: Critical, All Tasks)
+
+Data leakage detection runs **before all other recommendations** and produces the highest-score recommendations (score ≥ 75, up to 95).
+
+Two detection modes:
+
+**1. Identifier Columns**
+
+Signals:
+- `dtype == "identifier"` from profiler, OR
+- `unique_ratio >= 0.95` for integer / string columns (excluding float columns)
+- name contains keywords: `id`, `uuid`, `guid`, `pk`, `key`, `code`, `hash`, `token`, `index`, `row`
+
+Severity: always `critical` (score = 95, confidence = 0.97)
+
+Recommended action: `drop_column` before training.
+
+**2. Target Proxy Columns**
+
+Signals (numeric feature vs numeric/binary target):
+- Pearson correlation $|\rho| \ge 0.95$
+- Spearman correlation $|\rho_s| \ge 0.95$
+- Point-Biserial $|r_{pb}| \ge 0.95$ (when target is binary)
+
+Signals (categorical feature vs categorical target):
+- Cramér's V $\ge 0.90$
+
+Severity mapping:
+- `critical` if correlation ≥ 0.98 (score = 95)
+- `high` if correlation ≥ 0.95 (score = 88)
+- `medium` if correlation ≥ threshold (score = 75)
+
+Recommended action: `drop_column` with `verify_manually` as alternative.
+
+**Exclusion rule for identifier detection:**
+Float columns are never classified as identifiers even with `unique_ratio = 1.0`,
+because continuous measurements (income, price, temperature) naturally produce
+unique float values without being IDs.
+
+
 
 ## 4. Recommendation scoring
 

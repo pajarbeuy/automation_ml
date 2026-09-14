@@ -97,7 +97,7 @@ def _detect_dtype(series: pd.Series) -> str:
         if pd.api.types.is_float_dtype(series):
             return "numeric"
         # Deteksi ID unik jika nama kolom mengandung 'id'/'uuid' atau semua angka unik
-        is_id_name = any(k in series.name.lower() for k in ("id", "uuid", "guid", "pk", "key", "code"))
+        is_id_name = any(k in str(series.name or "").lower() for k in ("id", "uuid", "guid", "pk", "key", "code"))
         if is_id_name or (series.nunique() == len(series.dropna()) and series.nunique() > 100):
             return "identifier"
         return "numeric"
@@ -121,9 +121,12 @@ def _detect_dtype(series: pd.Series) -> str:
             pass
 
         # Heuristik ID unik untuk kolom string (misal: user_id, uuid, token)
-        if series.nunique() == len(series.dropna()) and series.nunique() > 100:
-            is_id_name = any(k in series.name.lower() for k in ("id", "uuid", "guid", "pk", "key", "code", "hash", "token"))
-            if is_id_name:
+        # Threshold 95% konsisten dengan IDENTIFIER_UNIQUE_RATIO_THRESHOLD di leakage_detector.py
+        n_non_null = len(series.dropna())
+        if n_non_null > 20:
+            unique_ratio = series.nunique() / n_non_null
+            is_id_name = any(k in str(series.name or "").lower() for k in ("id", "uuid", "guid", "pk", "key", "code", "hash", "token"))
+            if unique_ratio >= 0.95 and is_id_name:
                 return "identifier"
 
         return "categorical"

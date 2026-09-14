@@ -107,3 +107,14 @@ def test_dataset_hash_deterministic(titanic_like_df):
     h1 = profile_dataset(titanic_like_df, "survived").dataset_hash
     h2 = profile_dataset(titanic_like_df, "survived").dataset_hash
     assert h1 == h2
+
+
+def test_detect_dtype_identifier_string():
+    # 100 baris dengan 96 nilai unik (96% > 95% threshold) dan keyword 'id' di nama
+    vals = [f"usr_{i}" for i in range(96)] + ["usr_0", "usr_1", "usr_2", "usr_3"]
+    s = pd.Series(vals, name="user_id")
+    assert _detect_dtype(s) == "identifier"
+
+    # Data yang sama tapi nama bukan keyword ID -> categorical
+    s2 = pd.Series(vals, name="description")
+    assert _detect_dtype(s2) == "categorical"

@@ -67,3 +67,15 @@ def test_validation_logic_too_few_rows():
     with pytest.raises(ValueError, match="terlalu sedikit"):
         if len(df) < 5:
             raise ValueError(f"Dataset memiliki terlalu sedikit baris data ({len(df)} baris). Minimal diperlukan 5 baris data.")
+
+
+def test_target_vs_features_non_existent_target():
+    from ml_engine.eda.charts import target_vs_features
+    from ml_engine.profiling.profiler import profile_dataset
+    df = pd.DataFrame({"feat1": [1, 2, 3, 4, 5], "feat2": [4, 5, 6, 7, 8]})
+    profile = profile_dataset(df, target_column=None)
+    # Tidak melempar KeyError jika target_col None atau tidak ada di DataFrame
+    res1 = target_vs_features(df, profile, "non_existent_col")
+    assert res1 == {}
+    res2 = target_vs_features(df, profile, None)
+    assert res2 == {}

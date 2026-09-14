@@ -136,7 +136,7 @@ def predict(
                 if mae is not None:
                     mae_val = float(mae)
                     row_res["margin_of_error"] = round(mae_val, 2)
-                    row_res["interval_lower"] = round(max(0.0, pred_val - mae_val), 2)
+                    row_res["interval_lower"] = round(pred_val - mae_val, 2)
                     row_res["interval_upper"] = round(pred_val + mae_val, 2)
             results.append(row_res)
         else:

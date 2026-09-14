@@ -14,21 +14,35 @@ Record:
 
 ## 2. Define objective before training
 
-Example:
-
+Classification Example:
 ```text
-Primary metric: F1
-Secondary metrics: precision, recall, ROC-AUC
-CV: StratifiedKFold(5)
+Task: Classification
+Primary metric: F1-weighted
+Secondary metrics: accuracy, precision, recall, ROC-AUC
+CV: StratifiedKFold(n_splits=5, shuffle=True)
+Seed: 42
+```
+
+Regression Example:
+```text
+Task: Regression
+Primary metric: R2 Score (coefficient of determination)
+Secondary metrics: RMSE, MAE, MSE
+CV: KFold(n_splits=5, shuffle=True)
 Seed: 42
 ```
 
 ## 3. Establish baselines
 
-Run:
-- DummyClassifier
-- Logistic Regression
-- tree-based baseline
+Establish trivial and linear baselines before evaluating complex tree ensembles:
+- Classification: `DummyClassifier(strategy="most_frequent")` & `LogisticRegression`
+- Regression: `DummyRegressor(strategy="mean")` & `LinearRegression`
+
+## 3.1 Hyperparameter Tuning Protocol
+
+- Candidate models can be tuned using `RandomizedSearchCV` over predefined parameter distributions.
+- Tuning runs nested cross-validation across folds without data leakage.
+- Tuned models record exact parameters and are registered with a `_tune` suffix.
 
 ## 4. Compare pipelines
 

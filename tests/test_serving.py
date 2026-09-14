@@ -107,3 +107,19 @@ def test_serving_inference_regression_single_and_batch():
     assert item["margin_of_error"] == 15000.0
     assert item["interval_lower"] == round(item["prediction"] - 15000.0, 2)
     assert item["interval_upper"] == round(item["prediction"] + 15000.0, 2)
+
+
+def test_serving_inference_regression_supports_negative_interval():
+    # Model memprediksi nilai mendekati 0 atau negatif (misal temperatur)
+    pipeline = Pipeline([("model", LinearRegression())])
+    X = np.array([[0.0], [1.0], [2.0]])
+    y = np.array([-5.0, 0.0, 5.0])
+    pipeline.fit(X, y)
+
+    # Prediksi untuk X=0 menghasilkan pred=-5.0. Dengan MAE=2.0 -> interval_lower = -7.0 (negatif)
+    raw_input = {"feature": 0.0}
+    cv_metrics = {"r2": 0.99, "mae": 2.0}
+    res = predict(pipeline, raw_input, task_type="regression", metrics=cv_metrics)
+
+    assert res[0]["interval_lower"] < 0.0
+    assert res[0]["interval_lower"] == round(res[0]["prediction"] - 2.0, 2)

@@ -17,33 +17,28 @@ The system does not try to replace the data scientist. It:
 9. Tracks experiments and decisions.
 10. Produces a reproducible final pipeline and model artifact.
 
-## MVP scope
+## Platform Scope
 
-The first release targets **tabular classification** with CSV input.
+The platform targets **tabular machine learning** (Classification and Regression) with CSV input, structured across Phases 0 to 8 of the product roadmap.
 
-Included:
-- dataset profiling
-- missing-value analysis
-- duplicate detection
-- numerical/categorical detection
-- outlier detection
-- class imbalance analysis
-- EDA visualization
-- preprocessing recommendations
-- human approval/override
-- sklearn-compatible pipelines
-- baseline model comparison
-- cross-validation
-- experiment tracking
-- model and pipeline export
+Supported features:
+- Evidence-driven dataset profiling and statistical detection
+- Task-aware continuous and categorical EDA visualization
+- Preprocessing recommendations (missing values, scaling, encoding, target transformations)
+- Explicit human approval, rejection, and override of treatments
+- Leakage-safe Scikit-Learn Pipeline and ColumnTransformer construction
+- Multi-model benchmarking (linear, tree-based, gradient boosting, KNN, XGBoost, LightGBM)
+- Task-aware cross-validation (StratifiedKFold for classification, KFold for regression)
+- Automated feature engineering (`AutoFeatureEngineer` log1p skew & numeric interactions)
+- Hyperparameter tuning (`RandomizedSearchCV` with interactive trials inspection)
+- Standalone code (Python) and comprehensive HTML report generation
+- Live model serving and interactive playground with uncertainty quantification ($R^2$, MAE error margin, prediction intervals)
+- Asynchronous inference logging and real-time data & model drift monitoring (KS-Test & PSI)
 
-Explicitly out of MVP:
-- autonomous feature engineering
-- deep learning
-- NLP/CV
-- production model serving
-- autonomous deployment
-- unrestricted LLM-generated transformations
+Explicitly out of scope:
+- Deep learning computer vision or speech modalities
+- Autonomous unreviewed data mutation or deletion
+- Unrestricted LLM-generated transformation code without validation
 
 ## Design principle
 

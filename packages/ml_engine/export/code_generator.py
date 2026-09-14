@@ -399,18 +399,21 @@ class FrequencyEncoder:
         self.freq_map_ = {}
 
     def fit(self, X, y=None):
+        import pandas as pd
         col = X.iloc[:, 0] if hasattr(X, "iloc") else X[:, 0]
         counts = {}
         for v in col:
-            counts[v] = counts.get(v, 0) + 1
+            if pd.notna(v):
+                counts[v] = counts.get(v, 0) + 1
         total = len(col)
         self.freq_map_ = {k: v / total for k, v in counts.items()}
         return self
 
     def transform(self, X):
         import numpy as np
+        import pandas as pd
         col = X.iloc[:, 0] if hasattr(X, "iloc") else X[:, 0]
-        return np.array([self.freq_map_.get(v, 0.0) for v in col]).reshape(-1, 1)
+        return np.array([self.freq_map_.get(v, 0.0) if pd.notna(v) else 0.0 for v in col]).reshape(-1, 1)
 
     def fit_transform(self, X, y=None):
         return self.fit(X, y).transform(X)
