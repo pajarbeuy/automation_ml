@@ -48,3 +48,21 @@ def test_build_pipeline_with_feature_engineering():
     
     assert "feature_engineer" in pipeline.named_steps
     assert config["enable_feature_engineering"] is True
+
+
+def test_interaction_avoids_highly_collinear_pairs():
+    # Fitur 0 dan 1 berkorelasi sangat tinggi (~0.99)
+    # Fitur 0 dan 2 berkorelasi moderat (~0.4)
+    np.random.seed(42)
+    x0 = np.random.normal(0, 1, 200)
+    x1 = x0 + np.random.normal(0, 0.05, 200)  # corr ~ 0.99
+    x2 = 0.4 * x0 + np.random.normal(0, 0.9, 200)  # corr ~ 0.4
+    X = np.column_stack([x0, x1, x2])
+
+    fe = AutoFeatureEngineer(create_interactions=True, max_interactions=1)
+    fe.fit(X)
+
+    # Pasangan (0, 1) yang multikolinear tinggi TIDAK boleh dipilih
+    assert (0, 1) not in fe.interaction_pairs_idx_
+    assert (1, 0) not in fe.interaction_pairs_idx_
+    assert len(fe.interaction_pairs_idx_) == 1

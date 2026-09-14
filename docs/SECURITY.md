@@ -22,6 +22,9 @@ The platform must assume:
 7. Keep secrets outside project artifacts.
 8. Authorize artifact access by project ownership.
 9. Do not send raw datasets to an external LLM by default.
+10. Validate inference inputs: sanitize raw JSON payloads, guard against non-numeric values in numeric columns, and prevent memory exhaustion from oversized batch requests.
+11. Safe background logging: prediction logs recorded for drift monitoring are sanitized and decoupled from synchronous API execution.
+12. Pre-flight dataset validation: reject degenerate targets (100% null, constant single-class target) and malformed CSV rows before executing pipeline fitting.
 
 ## LLM privacy
 

@@ -66,8 +66,22 @@ class AutoFeatureEngineer(BaseEstimator, TransformerMixin):
                     val = corr_matrix.iloc[i, j]
                     if not np.isnan(val):
                         pairs.append((val, i, j))
-            pairs.sort(key=lambda x: x[0], reverse=True)
-            self.interaction_pairs_idx_ = [(p[1], p[2]) for p in pairs[: self.max_interactions]]
+
+            # Pilih pasangan dengan korelasi RENDAH-SEDANG (0.1 – 0.7).
+            # Pasangan berkorelasi tinggi (>0.7) menghasilkan interaksi yang redundan
+            # dan memperparah multikolinearitas (informasi tidak bertambah).
+            # Pasangan berkorelasi terlalu rendah (<0.1) cenderung noise.
+            candidate_pairs = [(v, i, j) for v, i, j in pairs if 0.1 <= v <= 0.7]
+
+            # Jika tidak ada pasangan dalam rentang ideal, fallback ke semua pasangan
+            # yang tidak terlalu berkorelasi tinggi (< 0.9)
+            if not candidate_pairs:
+                candidate_pairs = [(v, i, j) for v, i, j in pairs if v < 0.9]
+
+            # Urutkan berdasarkan korelasi sedang terlebih dahulu (mendekati 0.4)
+            candidate_pairs.sort(key=lambda x: abs(x[0] - 0.4))
+            self.interaction_pairs_idx_ = [(p[1], p[2]) for p in candidate_pairs[: self.max_interactions]]
+
 
         return self
 

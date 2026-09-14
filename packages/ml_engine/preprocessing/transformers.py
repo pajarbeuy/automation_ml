@@ -91,8 +91,13 @@ class FrequencyEncoder(BaseEstimator, TransformerMixin):
         for i in range(arr.shape[1]):
             col = arr[:, i]
             total = len(col)
-            unique, counts = np.unique(col[col != None], return_counts=True)  # noqa: E711
-            freq = {str(u): c / total for u, c in zip(unique, counts)}
+            valid_mask = pd.notna(col)
+            valid_col = col[valid_mask]
+            if len(valid_col) > 0:
+                unique, counts = np.unique(valid_col, return_counts=True)
+                freq = {str(u): c / total for u, c in zip(unique, counts)}
+            else:
+                freq = {}
             self.freq_maps_.append(freq)
         return self
 
@@ -100,6 +105,8 @@ class FrequencyEncoder(BaseEstimator, TransformerMixin):
         """
         Memetakan setiap nilai kategorikal ke frekuensi rasio yang sudah dihitung.
         """
+        import pandas as pd
+
         if hasattr(X, "values"):
             arr = X.values
         else:
@@ -109,6 +116,9 @@ class FrequencyEncoder(BaseEstimator, TransformerMixin):
         for i in range(arr.shape[1]):
             freq_map = self.freq_maps_[i]
             for j, val in enumerate(arr[:, i]):
-                result[j, i] = freq_map.get(str(val), 0.0)
+                if pd.isna(val):
+                    result[j, i] = 0.0
+                else:
+                    result[j, i] = freq_map.get(str(val), 0.0)
         return result
 

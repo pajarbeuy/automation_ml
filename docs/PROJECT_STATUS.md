@@ -61,14 +61,17 @@ ml-autonomus/
 │       ├── detection/
 │       │   ├── missing_detector.py
 │       │   ├── outlier_detector.py
-│       │   └── imbalance_detector.py
+│       │   ├── imbalance_detector.py
+│       │   └── leakage_detector.py  (NEW: target proxy + identifier detection)
 │       ├── recommendations/engine.py
 │       ├── preprocessing/
 │       │   ├── pipeline_builder.py
 │       │   └── transformers.py  (Winsorizer, FrequencyEncoder)
 │       ├── models/registry.py
-│       └── experiments/runner.py
-├── tests/                    # pytest (36 tests, all passing)
+│       ├── experiments/runner.py
+│       ├── serving/inference.py
+│       └── monitoring/drift_detector.py
+├── tests/                    # pytest (112 tests, all passing)
 └── docs/
 ```
 
@@ -223,12 +226,15 @@ ml-autonomus/
 
 ---
 
-### ❌ Phase 8: Production — BELUM
+### ✅ Phase 8: Production — SELESAI
+- [x] Model serving endpoint (`serving/inference.py` + `routers/serving.py`)
+- [x] Live Inference Playground UI (form dinamis, batch CSV, cURL/Python snippet)
+- [x] Native Drift Monitoring (KS-Test, PSI, background logging)
+- [x] Uncertainty Quantification regresi (R² confidence, ±MAE margin, prediction interval)
+- [x] WSL Docker Containerization (Dockerfile backend + frontend + nginx + docker-compose)
 - [ ] Authentication + multi-user
 - [ ] Object storage (S3/GCS)
 - [ ] Async workers (Celery/RQ)
-- [ ] Model serving endpoint
-- [ ] Monitoring + drift detection
 
 ---
 
@@ -266,6 +272,13 @@ ml-autonomus/
 | Skrip ekspor Python standalone gagal pada task Regresi & Feature Engineering | `export/code_generator.py` | Daftarkan model regressor, gunakan `KFold`, hilangkan `stratify=y`, dan sertakan class `AutoFeatureEngineer` |
 | Laporan HTML menampilkan metrik kosong & Confusion Matrix pada task Regresi | `export/report_generator.py` & `experiments.py` | Dukung tabel metrik regresi (R², RMSE, MAE) & ringkasan evaluasi residual |
 | RandomizedSearchCV berisiko hang di Windows | `experiments/tuner.py` | Set `n_jobs=1` untuk menghindari deadlock multiprocessing spawn Windows |
+| `outlier_detector.py` menghitung ulang IQR yang sudah ada di profil | `detection/outlier_detector.py` | Gunakan `f.p25`, `f.p75`, `f.outlier_rate_iqr` dari profil; hanya robust z-score yang tetap dihitung dari DataFrame |
+| `_recommend_scaling` tidak masuk branch StandardScaler saat skewness == 0.0 | `recommendations/engine.py` | Ubah `elif skewness and abs(...) < 0.5` → `elif skewness is not None and abs(...) < 0.5` |
+| Threshold deteksi identifier string di profiler tidak konsisten dengan `leakage_detector.py` | `profiling/profiler.py` | Ubah kondisi dari `nunique() == len(dropna())` (100%) ke `unique_ratio >= 0.95` agar selaras dengan `IDENTIFIER_UNIQUE_RATIO_THRESHOLD` |
+| `AutoFeatureEngineer` memilih pasangan interaksi dari korelasi tertinggi (memperparah multikolinearitas) | `preprocessing/feature_engineering.py` | Pilih pasangan berkorelasi rendah-sedang (0.1–0.7); urutkan mendekati 0.4 (paling complementary); fallback ke pasangan < 0.9 jika tidak ada kandidat |
+| `interval_lower` menggunakan `max(0.0, pred - mae)` yang mengasumsikan target selalu non-negatif | `serving/inference.py` | Hapus `max(0.0, ...)` — interval bawah boleh negatif jika domain target memang mengizinkan |
+| `target_vs_features` melempar KeyError jika `target_col` tidak ada atau None | `eda/charts.py` | Tambahkan guard `if not target_col or target_col not in df.columns: return {}` dan skip kolom target dari perbandingan fitur |
+| `FrequencyEncoder` menganggap `np.nan` sebagai kategori valid | `preprocessing/transformers.py` & `export/code_generator.py` | Gunakan `pd.notna(col)` saat fit dan petakan nilai missing ke 0.0 saat transform |
 
 ---
 
@@ -307,8 +320,9 @@ pytest tests/ -v
 ---
 
 *Terakhir diupdate: 2026-09-11*
-*Phase selesai: 0, 1, 2, 3, 4, 5, 6, 7, 8 (Production: Live Serving & Containerization)*
-*Fitur Tambahan Teruji (79 Pytest Tests 100% Passed):*
+*Versi saat ini: **v1.0.2***
+*Phase selesai: 0, 1, 2, 3, 4, 5, 6, 7, 8 (Production: Live Serving, Drift Monitoring, Uncertainty, Leakage Detection)*
+*Fitur Tambahan Teruji (**112 Pytest Tests 100% Passed**):*
 - [x] Task Regresi & Metric Cards (`R²`, `MAE`, `MSE`, `RMSE`) + Actual vs Predicted Scatter Plot (`ResultPage.tsx`)
 - [x] Automated Feature Engineering (`AutoFeatureEngineer` log1p skewness & numeric interaction generator)
 - [x] Hyperparameter Optimization Engine (`tuner.py` + `POST /api/projects/{id}/experiments/tune` + UI Trials Modal)
@@ -349,6 +363,14 @@ pytest tests/ -v
   - Live Model Output menyajikan persentase keyakinan model regresi berbasis $R^2$ Score dari evaluasi Cross-Validation.
   - Kartu estimasi ketidakpastian: Margin of Error ($\pm\text{MAE}$) dan Rentang Estimasi (*Prediction Range* $[\text{pred} - \text{MAE}, \text{pred} + \text{MAE}]$) untuk mencegah salah paham bahwa prediksi bernilai 100% mutlak.
   - Otomatis menyertakan kolom `confidence`, `margin_of_error`, `interval_lower`, dan `interval_upper` pada ekspor file CSV hasil Batch Prediction.
+- [x] **Data Leakage Detection** (`packages/ml_engine/detection/leakage_detector.py`, `packages/ml_engine/recommendations/engine.py`):
+  - **Identifier Detection**: Mendeteksi kolom ID/UUID/index baris (unique ratio ≥ 95% pada kolom integer/string). Kolom float kontinu *tidak* terklasifikasi sebagai identifier meskipun setiap nilainya unik.
+  - **Target Proxy Detection (Numerik)**: Menghitung Pearson + Spearman (ambil max) untuk target kontinu, dan Point-Biserial untuk target biner. Threshold: |korelasi| ≥ 0.95.
+  - **Target Proxy Detection (Kategorikal)**: Menghitung Cramér's V untuk pasangan kategorikal–kategorikal. Threshold: V ≥ 0.90.
+  - **Severity Grading**: `critical` (≥ 0.98), `high` (≥ 0.95), `medium` (≥ threshold). Identifier selalu `critical`.
+  - **Integrasi Engine**: Leakage detection dieksekusi sebagai **langkah 0** (sebelum semua rekomendasi lain) di `generate_recommendations`. Category: `data_leakage`, score tertinggi (75–95).
+  - **33 Test Cases** terverifikasi 100% passed (helper statistik, identifier, proxy numerik/biner, edge cases, integrasi engine).
+
 
 
 

@@ -119,3 +119,25 @@ def test_winsorizer_in_pipeline(simple_df):
     X = simple_df.drop(columns=["survived"])
     y = simple_df["survived"]
     pipeline.fit(X, y)  # Should not raise
+
+
+def test_frequency_encoder_with_nan():
+    from ml_engine.preprocessing.transformers import FrequencyEncoder
+    import numpy as np
+    import pandas as pd
+
+    # Data dengan 'A', 'B', None, dan np.nan
+    df = pd.DataFrame({"cat": ["A", "A", "B", None, np.nan, "A"]})
+    encoder = FrequencyEncoder()
+    res = encoder.fit_transform(df)
+
+    # Valid categories: A (3/6 = 0.5), B (1/6 = ~0.1667)
+    # NaN and None should NOT be categories in freq_maps_, and transform should output 0.0
+    freq_map = encoder.freq_maps_[0]
+    assert "nan" not in freq_map
+    assert "None" not in freq_map
+    assert abs(freq_map["A"] - 3 / 6) < 1e-4
+    assert abs(freq_map["B"] - 1 / 6) < 1e-4
+    # Check transformed values for None and NaN (index 3 and 4)
+    assert res[3, 0] == 0.0
+    assert res[4, 0] == 0.0

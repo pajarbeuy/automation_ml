@@ -128,7 +128,7 @@ def correlation_matrix(df: pd.DataFrame, profile: DatasetProfile) -> dict:
 
 
 def target_vs_features(
-    df: pd.DataFrame, profile: DatasetProfile, target_col: str
+    df: pd.DataFrame, profile: DatasetProfile, target_col: str | None
 ) -> dict[str, Any]:
     """
     Feature vs target analysis.
@@ -136,10 +136,15 @@ def target_vs_features(
     - Categorical features: class proportion per category
     """
     result: dict[str, Any] = {}
+    if not target_col or target_col not in df.columns:
+        return result
+
     target = df[target_col]
     classes = sorted(target.dropna().unique().tolist(), key=str)
 
     for f in profile.features:
+        if f.name == target_col:
+            continue
         if f.dtype == "numeric":
             data = {}
             for cls in classes:

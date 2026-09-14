@@ -76,9 +76,13 @@ The AI layer must consume structured evidence rather than inventing statistical 
 - [x] Model Serving & Live Prediction Engine (`POST /api/projects/{id}/predict` on raw JSON)
 - [x] Candidate Feature Schema Generator (`GET /api/projects/{id}/models/candidate/schema`)
 - [x] Live Prediction & Inference Playground UI in `ResultPage.tsx` (Single prediction, Batch CSV, API snippets)
+- [x] Regression Uncertainty Quantification ($R^2$ variance explained, $\pm\text{MAE}$ margin of error, prediction intervals)
 - [x] Containerization & Orchestration (`apps/api/Dockerfile`, `apps/web/Dockerfile`, `apps/web/nginx.conf`, `docker-compose.yml`)
 - [x] Model Registry Integration (`mlflow.sklearn.log_model`)
-- [x] Model Drift Monitoring (`scipy.stats` KS-Test & PSI drift detector, background logging, simulator, dan Neumorphic UI dashboard)
+- [x] Native Model & Data Drift Monitoring Engine (`scipy.stats` KS-Test, PSI drift detector, background logging, simulator, and Neumorphic dashboard)
+- [x] Task-Aware Recommendation Applicability (class imbalance strictly omitted for regression; regression target skewness and outliers added)
 - [ ] Async Workers (Redis / Celery)
 - [ ] Authentication & Multi-User Projects
 - [ ] Cloud Object Storage (S3 / MinIO)
+
+> Note: Detailed specifications and principles are continuously maintained in [ROADMAP_V2.md](file:///d:/ml-autonomus/docs/ROADMAP_V2.md).

@@ -27,6 +27,7 @@ from profiling.profiler import DatasetProfile
 from detection.missing_detector import detect_missing
 from detection.outlier_detector import detect_outliers
 from detection.imbalance_detector import detect_imbalance
+from detection.leakage_detector import detect_leakage
 
 
 # =============================================================================
@@ -342,7 +343,7 @@ def _recommend_scaling(
         )
         alternatives = ["standard_scaling", "no_scaling"]
 
-    elif skewness and abs(skewness) < 0.5:
+    elif skewness is not None and abs(skewness) < 0.5:
         action = "standard_scaling"
         confidence = 0.78
         score = 74.0
@@ -375,7 +376,67 @@ def _recommend_scaling(
 
 
 # =============================================================================
-# 6. REKOMENDASI CLASS IMBALANCE (KETIDAKSEIMBANGAN KELAS TARGET)
+# 6. REKOMENDASI LEAKAGE (KEBOCORAN DATA)
+# =============================================================================
+
+def _recommend_leakage(
+    leakage_type: str,
+    column: str,
+    severity: str,
+    correlation_value: float | None,
+    correlation_method: str | None,
+    unique_ratio: float | None,
+    evidence: list[str],
+    recommendation_text: str,
+) -> Recommendation:
+    """
+    Membuat Recommendation dari hasil LeakageReport.
+
+    Score diberikan berdasarkan severity:
+    - critical: 95 (tertinggi, harus ditangani sebelum training)
+    - high:     88
+    - medium:   75
+    """
+    severity_score = {"critical": 95.0, "high": 88.0, "medium": 75.0}
+    severity_conf  = {"critical": 0.97, "high": 0.90, "medium": 0.80}
+
+    score = severity_score.get(severity, 75.0)
+    confidence = severity_conf.get(severity, 0.80)
+
+    if leakage_type == "identifier":
+        recommended_action = "drop_column"
+        rationale = (
+            f"Kolom '{column}' terdeteksi sebagai identifier (rasio unik = "
+            f"{round((unique_ratio or 0) * 100, 1)}%). "
+            "Identifier tidak membawa informasi prediktif dan menyebabkan "
+            "overfitting sempurna (model menghafal ID, bukan belajar pola)."
+        )
+        alternatives = ["verify_manually"]
+    else:  # target_proxy
+        recommended_action = "drop_column"
+        corr_str = f"{correlation_method}={round(correlation_value or 0, 4)}"
+        rationale = (
+            f"Kolom '{column}' memiliki korelasi sangat tinggi dengan target ({corr_str}). "
+            "Kemungkinan besar merupakan proxy bocoran dari target yang dikumpulkan "
+            "setelah label diketahui — menyebabkan model tidak bisa generalisasi ke data baru."
+        )
+        alternatives = ["verify_manually", "keep_if_valid_feature"]
+
+    return Recommendation(
+        id=str(uuid.uuid4()),
+        category="data_leakage",
+        column=column,
+        recommended_action=recommended_action,
+        confidence=confidence,
+        score=score,
+        evidence=evidence,
+        rationale=rationale,
+        alternatives=alternatives,
+    )
+
+
+# =============================================================================
+# 7. REKOMENDASI CLASS IMBALANCE (KETIDAKSEIMBANGAN KELAS TARGET)
 # =============================================================================
 
 def _recommend_imbalance(
@@ -490,6 +551,27 @@ def generate_recommendations(
     """
     recommendations: list[Recommendation] = []
     feature_map = {f.name: f for f in profile.features}
+    feature_dtypes = {f.name: f.dtype for f in profile.features}
+
+    # 0. Deteksi Kebocoran Data (Data Leakage) — Prioritas Tertinggi
+    if profile.target:
+        leakage_reports = detect_leakage(
+            df=df,
+            target_column=profile.target,
+            feature_dtypes=feature_dtypes,
+        )
+        for lr in leakage_reports:
+            rec = _recommend_leakage(
+                leakage_type=lr.leakage_type,
+                column=lr.column,
+                severity=lr.severity,
+                correlation_value=lr.correlation_value,
+                correlation_method=lr.correlation_method,
+                unique_ratio=lr.unique_ratio,
+                evidence=lr.evidence,
+                recommendation_text=lr.recommendation,
+            )
+            recommendations.append(rec)
 
     # 1. Analisis Nilai Kosong (Missing Values)
     missing_reports = detect_missing(df, profile.features)

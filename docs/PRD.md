@@ -8,7 +8,7 @@
 
 **Primary domain:** Tabular machine learning
 
-**MVP task:** Classification
+**Supported tasks:** Classification and Regression
 
 ## 2. Problem statement
 
@@ -272,20 +272,25 @@ Cross-validation must fit transformations inside each training fold.
 
 ### FR-010 Model selection
 
-MVP candidates:
+Supported classifiers:
 - Logistic Regression
 - Linear SVM
-- Random Forest
-- Gradient Boosting
-- HistGradientBoosting
-- KNN
+- Random Forest Classifier
+- Gradient Boosting Classifier
+- HistGradientBoosting Classifier
+- KNN Classifier
+- XGBoost Classifier
+- LightGBM Classifier
 
-Optional later:
-- XGBoost
-- LightGBM
-- CatBoost
-
-External libraries should be optional dependencies, not MVP requirements.
+Supported regressors:
+- Linear Regression
+- Ridge Regression
+- Random Forest Regressor
+- Gradient Boosting Regressor
+- HistGradientBoosting Regressor
+- KNN Regressor
+- XGBoost Regressor
+- LightGBM Regressor
 
 ### FR-011 Evaluation
 
@@ -294,9 +299,20 @@ Supported classification metrics:
 - precision
 - recall
 - F1
-- ROC-AUC where applicable
-- PR-AUC where applicable
+- ROC-AUC
+- PR-AUC
 - confusion matrix
+
+Supported regression metrics:
+- $R^2$ (coefficient of determination / explained variance)
+- MAE (mean absolute error)
+- MSE (mean squared error)
+- RMSE (root mean squared error)
+- residual analysis & actual-vs-predicted scatter plots
+
+Evaluation protocol:
+- StratifiedKFold cross-validation for classification
+- KFold cross-validation for regression
 
 The user selects a primary objective.
 
@@ -305,13 +321,14 @@ The user selects a primary objective.
 Every experiment must record:
 - dataset version
 - preprocessing configuration
-- model configuration
+- model configuration & hyperparameters
 - random seed
-- evaluation strategy
-- metrics
-- execution status
+- evaluation strategy (folds & split type)
+- metrics (mean & std across folds)
+- execution status & training time
 - timestamp
-- artifact references
+- artifact references (pipeline.pkl, metrics.json)
+- MLflow run tracking and model registration
 
 ### FR-013 Recommendation approval
 
@@ -322,17 +339,41 @@ Each recommendation has:
 - affected columns
 - expected impact
 - confidence
+- task applicability (`NOT_APPLICABLE` for invalid task types)
 
 ### FR-014 Export
 
 The user can export:
 - trained model
 - preprocessing pipeline
-- complete sklearn Pipeline
+- complete Scikit-Learn Pipeline (`pipeline.pkl`)
 - configuration JSON
 - experiment results
-- generated report
-- optional generated Python code
+- standalone reproducible Python training script (`train_pipeline.py`)
+- standalone comprehensive HTML experiment report
+
+### FR-015 Model Serving & Live Inference
+
+The platform must provide low-latency model serving for candidate models:
+- Dynamic input schema generation (`/models/candidate/schema`) matching active model features.
+- Single-row live prediction and batch CSV upload evaluation.
+- Classification confidence and class probability distribution.
+- Regression uncertainty quantification: $R^2$ confidence score, margin of error ($\pm\text{MAE}$), and expected prediction intervals $[\text{pred} - \text{MAE}, \text{pred} + \text{MAE}]$.
+- Automatic tolerance for dropped/unused features.
+
+### FR-016 Model & Data Drift Monitoring
+
+The platform continuously monitors production inferences against baseline training data:
+- Asynchronous non-blocking logging of feature inputs and predictions (`PredictionLog`).
+- Two-sample Kolmogorov-Smirnov Test and Wasserstein Distance for continuous numerical features.
+- Population Stability Index (PSI) for categorical features.
+- Aggregate system health: `HEALTHY`, `WARNING`, and `DRIFT_DETECTED`.
+- Live traffic simulator for test validation.
+
+### FR-017 Automated Feature Engineering & Hyperparameter Optimization
+
+- Automated generation of candidate features: log1p skew transformations and pairwise numerical interactions.
+- Systematic hyperparameter tuning using `RandomizedSearchCV` with interactive trial inspection and direct registration of tuned models.
 
 ## 9. Non-functional requirements
 

@@ -90,50 +90,73 @@ Converts approved decisions into executable sklearn components.
 Preferred abstraction:
 - ColumnTransformer
 - Pipeline
-- custom transformers where necessary
+- custom transformers (Winsorizer, FrequencyEncoder, AutoFeatureEngineer)
 
-### Experiment engine
+### Experiment & Tuning engine
 
 Runs:
 - train/validation
-- cross-validation
-- candidate models
-- metric calculation
-- artifact persistence
+- stratified CV (Classification) and KFold CV (Regression)
+- candidate models (linear, tree-based, boosting, KNN, XGBoost, LightGBM)
+- hyperparameter tuning via RandomizedSearchCV
+- metric calculation ($R^2$, MAE, RMSE, Accuracy, F1, ROC-AUC)
+- artifact persistence and MLflow model tracking
 
-### Artifact manager
+### Serving & Inference engine
 
-Stores:
-- model
-- pipeline
-- configuration
-- metrics
-- reports
+Responsibilities:
+- schema resolution for candidate model features
+- single-row live inference and batch CSV processing
+- classification probability estimation
+- regression uncertainty quantification ($R^2$ variance explained, $\pm\text{MAE}$ margin of error, prediction intervals)
+- automatic tolerance for unselected or dropped columns
 
-## 3. Suggested repository
+### Drift Monitoring engine
+
+Responsibilities:
+- asynchronous non-blocking prediction logging (`PredictionLog`)
+- two-sample Kolmogorov-Smirnov test and Wasserstein distance for continuous features
+- Population Stability Index (PSI) for categorical features
+- traffic simulation and real-time health reporting
+
+### Artifact & Export manager
+
+Stores and exports:
+- serialized Scikit-Learn pipelines (`pipeline.pkl`)
+- metrics and cross-validation summaries (`metrics.json`)
+- standalone executable Python training script (`train_pipeline.py`)
+- standalone comprehensive HTML experiment reports
+
+## 3. Repository structure
 
 ```text
-automl-hil/
+ml-autonomus/
 ├── apps/
-│   ├── api/
-│   └── web/
+│   ├── api/                    # FastAPI backend
+│   │   ├── routers/            # projects, datasets, recommendations, pipelines, experiments, serving, monitoring, assistant
+│   │   ├── db_models/          # SQLAlchemy ORM (Project, Dataset, WorkflowDecision, Experiment, Metric, Artifact, PredictionLog)
+│   │   └── storage/            # Local filesystem artifact & dataset storage
+│   └── web/                    # React 18 + TypeScript + Vite frontend
+│       ├── src/pages/          # Dashboard, Upload, EDA, Treatment, Pipeline, Experiments, Result, DriftMonitoring
+│       └── src/components/     # Sidebar, Modals, ErrorBoundary, AIAssistantWidget
 ├── packages/
-│   └── ml_engine/
-│       ├── profiling/
-│       ├── eda/
-│       ├── detection/
-│       ├── recommendations/
-│       ├── preprocessing/
-│       ├── models/
-│       ├── evaluation/
-│       └── experiments/
-├── tests/
-├── docs/
-├── scripts/
-├── docker/
-├── pyproject.toml
+│   └── ml_engine/              # Pure Python ML package
+│       ├── profiling/          # Dataset profiler & statistics
+│       ├── eda/                # Visual chart data generators
+│       ├── detection/          # Missing, outlier, imbalance detectors
+│       ├── recommendations/    # Task-aware recommendation engine
+│       ├── preprocessing/      # Pipeline builder & custom transformers
+│       ├── models/             # Model registry & adapters (sklearn, xgboost, lightgbm)
+│       ├── evaluation/         # CV evaluators (StratifiedKFold & KFold)
+│       ├── experiments/        # Experiment runner & hyperparameter tuner
+│       ├── serving/            # Live inference & uncertainty estimation
+│       ├── monitoring/         # Statistical drift detector (KS-test, PSI)
+│       ├── assistant/          # Rule-based natural language explainer
+│       └── export/             # Standalone Python script & HTML report generators
+├── tests/                      # Pytest suite (79 tests)
+├── docs/                       # Architectural specs & roadmaps
 ├── docker-compose.yml
-└── README.md
+└── pyproject.toml
 ```
 
 ## 4. Execution model

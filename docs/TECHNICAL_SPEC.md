@@ -105,6 +105,47 @@ The platform should store a declarative configuration before generating executab
 }
 ```
 
+### PredictionResult (Serving Contract)
+
+```json
+{
+  "prediction": 472850.7594,
+  "confidence": 0.8273,
+  "confidence_metric": "R2 Score",
+  "margin_of_error": 27049.62,
+  "interval_lower": 445801.14,
+  "interval_upper": 499900.38,
+  "probabilities": null
+}
+```
+
+### DriftReport (Monitoring Contract)
+
+```json
+{
+  "status": "HEALTHY",
+  "total_predictions_logged": 120,
+  "baseline_rows": 4600,
+  "drift_share": 0.0,
+  "metrics": {
+    "total_features": 12,
+    "drifted_features": 0
+  },
+  "features": [
+    {
+      "feature_name": "sqft_living",
+      "dtype": "numeric",
+      "test_name": "kolmogorov_smirnov",
+      "statistic": 0.064,
+      "p_value": 0.452,
+      "threshold": 0.05,
+      "wasserstein_distance": 42.15,
+      "drift_detected": false
+    }
+  ]
+}
+```
+
 ## 4. Preprocessing rules
 
 Transformations must be fitted only on training data.
@@ -140,23 +181,21 @@ Fold
 
 ## 5. Model evaluation protocol
 
-Default:
-- stratified K-fold
-- 5 folds
-- fixed random seed
+### Classification
+- Cross-validation: `StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)`
+- Primary metrics: `f1_weighted`, `accuracy`, `precision`, `recall`, `roc_auc`
+- Baselines: `DummyClassifier`, `LogisticRegression`
 
-User chooses primary metric.
-
-Secondary metrics remain visible.
+### Regression
+- Cross-validation: `KFold(n_splits=5, shuffle=True, random_state=seed)`
+- Primary metrics: `r2` (coefficient of determination), `neg_root_mean_squared_error`, `neg_mean_absolute_error`
+- Baselines: `DummyRegressor`, `LinearRegression`
 
 ## 6. Baselines
 
-Every project should establish at least:
-- DummyClassifier baseline
-- Logistic Regression baseline
-- one tree-based baseline
-
-This prevents the system from celebrating a model that barely beats random/simple prediction.
+Every project establishes baseline models to verify that complex algorithms beat trivial predictors:
+- Classification: `DummyClassifier(strategy="most_frequent")`
+- Regression: `DummyRegressor(strategy="mean")`
 
 ## 7. Determinism
 

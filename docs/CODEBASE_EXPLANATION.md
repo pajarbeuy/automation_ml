@@ -20,7 +20,7 @@ ml-autonomus/
 ├── packages/
 │   └── ml_engine/                # 🧠 ENGINE UTAMA (Pure Python ML Package)
 │       ├── profiling/            # Deteksi profil dataset (kolom, statistik, skewness)
-│       ├── detection/            # Detector spesifik (missing, outlier, class imbalance)
+│       ├── detection/            # Detector spesifik (missing, outlier, class imbalance, data leakage)
 │       ├── eda/                  # Generator chart/grafik untuk visualisasi data
 │       ├── recommendations/      # Engine penentu rekomendasi preprocessing deterministik
 │       ├── preprocessing/        # Pembentuk scikit-learn Pipeline (Winsorizer, FrequencyEncoder)
@@ -45,7 +45,7 @@ ml-autonomus/
 │       │   ├── api/client.ts     # Helper panggilan API Backend (axios)
 │       │   ├── components/       # Komponen UI (Sidebar, AIAssistantWidget)
 │       │   └── pages/            # 7 Halaman Alur Kerja (Upload, EDA, Treatment, Result/Serving, dll)
-├── tests/                        # 🧪 UNIT TESTS (60 test Pytest, 100% Passed)
+├── tests/                        # 🧪 UNIT TESTS (112 test Pytest, 100% Passed)
 ├── Dockerfile & docker-compose   # 🐳 Containerization Production Setup (WSL Docker)
 └── docs/                         # 📚 DOKUMENTASI LENGKAP
 ```
@@ -66,10 +66,14 @@ Modul ini adalah **otak utama machine learning**. Kode di dalam folder ini tidak
   - `skewness` & `kurtosis`: Mengukur kemiringan distribusi data untuk menentukan perlunya *scaler* atau *imputer* tertentu.
   - `duplicate_rows`: Jumlah baris duplikat di dataset.
 
-#### 2. `detection/` (`missing_detector.py`, `outlier_detector.py`, `imbalance_detector.py`)
+#### 2. `detection/` (`missing_detector.py`, `outlier_detector.py`, `imbalance_detector.py`, `leakage_detector.py`)
 - **Fungsi Utama**: Detektor spesifik untuk mengidentifikasi masalah pada dataset.
 - **Deteksi Outlier**: Gunakan aturan IQR (*Interquartile Range*) dan *Robust Z-Score* untuk menemukan baris bernilai ekstrem.
 - **Deteksi Class Imbalance**: Menghitung rasio perbandingan kelas target (misal target biner `0: 90%` dan `1: 10%`).
+- **Deteksi Data Leakage** (`leakage_detector.py`): Detektor kebocoran data dua-mode yang dieksekusi **sebelum** semua rekomendasi lain:
+  - *Identifier Detection*: Menandai kolom ID/UUID/index baris (unique ratio ≥ 95% pada integer/string). Kolom **float** dikecualikan karena nilai desimal kontinu memang cenderung unik.
+  - *Target Proxy Detection*: Menghitung korelasi Pearson + Spearman (numerik), Point-Biserial (target biner), dan Cramér's V (kategorikal). Threshold: 0.95 (numerik) / 0.90 (kategorikal).
+  - *Severity*: `critical` (≥ 0.98 / identifier), `high` (≥ 0.95), `medium` (≥ threshold).
 
 #### 3. `recommendations/engine.py`
 - **Fungsi Utama**: *Decision Engine* yang menentukan rekomendasi pra-pemrosesan data berdasarkan bukti statistik.
@@ -205,6 +209,7 @@ flowchart TD
 - **Menambah Aturan Preprocessing Baru**: Edit file [packages/ml_engine/recommendations/engine.py](file:///d:/ml-autonomus/packages/ml_engine/recommendations/engine.py).
 - **Menambah Fitur Inferensi & Serving**: Edit file [packages/ml_engine/serving/inference.py](file:///d:/ml-autonomus/packages/ml_engine/serving/inference.py) dan [apps/api/routers/serving.py](file:///d:/ml-autonomus/apps/api/routers/serving.py).
 - **Menambah Uji Statistik Drift Monitoring**: Edit file [packages/ml_engine/monitoring/drift_detector.py](file:///d:/ml-autonomus/packages/ml_engine/monitoring/drift_detector.py) dan [apps/api/routers/monitoring.py](file:///d:/ml-autonomus/apps/api/routers/monitoring.py).
+- **Menambah Deteksi Leakage Baru**: Edit file [packages/ml_engine/detection/leakage_detector.py](file:///d:/ml-autonomus/packages/ml_engine/detection/leakage_detector.py) — sesuaikan threshold atau tambah mode deteksi baru. Update `__init__.py` di folder `detection/` jika menambah export publik.
 - **Menambah Halaman Frontend Baru**: Tambahkan file di `apps/web/src/pages/` dan daftarkan rutenya di [apps/web/src/App.tsx](file:///d:/ml-autonomus/apps/web/src/App.tsx).
 
 ---
