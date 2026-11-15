@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -136,6 +136,7 @@ class PipelineValidationOut(BaseModel):
 
 class ExperimentCreate(BaseModel):
     model_names: list[str]
+    experiment_name: str | None = None
     random_seed: int = 42
     cv_folds: int = 5
     primary_metric: str = "f1"
@@ -172,6 +173,7 @@ class ExperimentOut(BaseModel):
     project_id: str
     dataset_id: str
     model_name: str
+    experiment_name: str | None = None
     random_seed: int
     status: str
     training_time_seconds: float | None
@@ -216,3 +218,207 @@ class PaginatedOut(BaseModel):
     total: int
     items: list[Any]
 
+
+# ---------------------------------------------------------------------------
+# Treatment Candidates & Validation
+# ---------------------------------------------------------------------------
+
+class TreatmentCandidateOut(BaseModel):
+    candidate_id: str
+    name: str
+    strategy_type: str
+    description: str
+    decisions: list[dict[str, Any]]
+    summary_tags: list[str]
+
+
+class TreatmentCandidateEvaluationOut(BaseModel):
+    candidate_id: str
+    name: str
+    strategy_type: str
+    primary_metric_name: str
+    primary_score: float
+    primary_std: float
+    secondary_metric_name: str
+    secondary_score: float
+    rank: int
+    summary_tags: list[str]
+    training_time_seconds: float
+
+
+class TreatmentValidationReportOut(BaseModel):
+    task_type: str
+    benchmark_model: str
+    primary_metric: str
+    validation_status: Literal["SUPERIOR", "INCONCLUSIVE", "SUBOPTIMAL", "INVALID_EVALUATION"]
+    headline: str
+    explanation: str
+    lift: float | None = None
+    lift_percentage: float | None = None
+    mean_difference: float | None = None
+    relative_difference: float | None = None
+    best_candidate_id: str
+    confidence_level: float = 0.90
+    ci_lower: float | None = None
+    ci_upper: float | None = None
+    baseline_fold_scores: list[float] = []
+    recommended_fold_scores: list[float] = []
+    fold_differences: list[float] = []
+    sign_agreement: str = ""
+    evaluation_metadata: dict[str, Any] = {}
+    candidates: list[TreatmentCandidateEvaluationOut]
+
+
+class ApplyCandidateIn(BaseModel):
+    candidate_id: str
+
+
+class ApplyCandidateOut(BaseModel):
+    status: str = "success"
+    candidate_id: str
+    applied_count: int
+    decisions: list[WorkflowDecisionOut]
+
+
+
+# ---------------------------------------------------------------------------
+# Multi-Tenant & Security Schemas
+# ---------------------------------------------------------------------------
+
+class TenantCreate(BaseModel):
+    name: str
+    slug: str
+
+
+class TenantOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    slug: str
+    is_active: bool
+    created_at: datetime
+
+
+class UserRegister(BaseModel):
+    email: str
+    username: str
+    password: str
+    tenant_id: str | None = None
+    role: str = "data_scientist"
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: "UserOut"
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    email: str
+    username: str
+    role: str
+    tenant_id: str | None = None
+    is_active: bool
+    created_at: datetime
+
+
+class ApiKeyCreate(BaseModel):
+    name: str
+    expires_in_days: int | None = None
+
+
+class ApiKeyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    prefix: str
+    created_at: datetime
+    expires_at: datetime | None = None
+    raw_key: str | None = None  # Returned once on creation
+
+
+# ---------------------------------------------------------------------------
+# Asynchronous Job Worker Schemas
+# ---------------------------------------------------------------------------
+
+class JobEnqueueIn(BaseModel):
+    task_name: str
+    project_id: str | None = None
+    payload: dict[str, Any] = {}
+    priority: int = 0
+
+
+class JobOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str | None = None
+    tenant_id: str | None = None
+    task_name: str
+    status: str
+    priority: int
+    progress: float
+    payload_json: dict[str, Any] | None = None
+    result_json: dict[str, Any] | None = None
+    error_message: str | None = None
+    worker_id: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+# ---------------------------------------------------------------------------
+# Cloud Object Storage Schemas
+# ---------------------------------------------------------------------------
+
+class StorageConfigOut(BaseModel):
+    backend: str
+    is_cloud: bool
+    base_uri: str
+
+
+# ---------------------------------------------------------------------------
+# Meta-Learning Recommendation Ranker Schemas
+# ---------------------------------------------------------------------------
+
+class MetaRankCandidateItem(BaseModel):
+    candidate_id: str
+    name: str
+    strategy_type: str
+    predicted_lift: float
+    predicted_score: float
+    meta_confidence: float
+    heuristic_score: float
+    blended_rank_score: float
+    rationale: str
+
+
+class MetaRankReportOut(BaseModel):
+    project_id: str
+    task_type: str
+    meta_features: dict[str, Any]
+    model_status: str  # "trained" | "cold_start_fallback"
+    historical_runs_count: int
+    ranked_candidates: list[MetaRankCandidateItem]
+
+
+class MetaTrainIn(BaseModel):
+    force_retrain: bool = False
+
+
+class MetaTrainOut(BaseModel):
+    status: str
+    total_samples: int
+    features_used: list[str]
+    test_r2_score: float | None = None
+    message: str

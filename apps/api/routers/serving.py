@@ -364,3 +364,21 @@ async def predict_batch_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/projects/{project_id}/word-attribution")
+def get_model_word_attribution(project_id: str, db: Session = Depends(get_db)):
+    """Retrieve global positive and negative word attribution weights from candidate model."""
+    project, candidate_exp, pipeline_path = _get_candidate_and_pipeline(project_id, db)
+    try:
+        pipeline = load_pipeline(pipeline_path)
+        from assistant.text_explainer import extract_global_word_attributions
+        attributions = extract_global_word_attributions(pipeline)
+        return {
+            "project_id": project_id,
+            "experiment_id": candidate_exp.id,
+            "model_name": candidate_exp.model_name,
+            **attributions,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to extract word attributions: {exc}")

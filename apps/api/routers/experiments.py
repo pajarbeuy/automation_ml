@@ -28,7 +28,7 @@ _PKG = str(Path(__file__).parent.parent.parent.parent / "packages" / "ml_engine"
 if _PKG not in sys.path:
     sys.path.insert(0, _PKG)
 
-from models.registry import list_models, BASELINE_MODELS, BASELINE_REGRESSION_MODELS
+from models.registry import list_models, BASELINE_MODELS, BASELINE_REGRESSION_MODELS, BASELINE_SENTIMENT_MODELS
 from profiling.profiler import FeatureProfile
 from experiments.runner import run_experiment
 from schemas import ExperimentCreate, ExperimentOut, MetricOut, ArtifactOut
@@ -135,8 +135,12 @@ def run_experiments(
     # 5. Tentukan Model yang Akan Dijalankan (Sesuai Pilihan User)
     model_names = list(payload.model_names)
     if not model_names:
-        model_names = list(BASELINE_REGRESSION_MODELS if task_type == "regression" else BASELINE_MODELS)
-
+        if task_type == "regression":
+            model_names = list(BASELINE_REGRESSION_MODELS)
+        elif task_type in ("sentiment_analysis", "nlp"):
+            model_names = list(BASELINE_SENTIMENT_MODELS)
+        else:
+            model_names = list(BASELINE_MODELS)
     created_experiments: list[Experiment] = []
 
     # 6. Buat Record 'pending' & Tambahkan ke Background Tasks
@@ -149,6 +153,7 @@ def run_experiments(
             dataset_id=dataset.id,
             config_json={
                 "model_name": model_name,
+                "experiment_name": payload.experiment_name,
                 "cv_folds": payload.cv_folds,
                 "random_seed": payload.random_seed,
                 "enable_feature_engineering": payload.enable_feature_engineering,
