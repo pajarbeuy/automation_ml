@@ -101,6 +101,21 @@ async def upload_dataset(
     try:
         profile = profile_dataset(df, target_column)
         profile_dict = profile.to_dict()
+
+        # Run text profiling if text columns exist or project is sentiment analysis
+        text_cols = [f.name for f in profile.features if f.dtype == "text"]
+        if not text_cols and project.task_type in ("sentiment_analysis", "nlp"):
+            str_cols = [c for c in df.columns if c != target_column and df[c].dtype == object]
+            if str_cols:
+                text_cols = [str_cols[0]]
+
+        if text_cols:
+            try:
+                from profiling.text_profiler import profile_text
+                profile_dict["text_profile"] = profile_text(df, text_cols[0], target_column)
+            except Exception:
+                pass
+
         eda_dict = build_eda(df, profile)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Profiling failed: {exc}")
