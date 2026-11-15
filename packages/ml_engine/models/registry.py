@@ -18,7 +18,8 @@ from sklearn.ensemble import (
     RandomForestClassifier,
     RandomForestRegressor,
 )
-from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
+from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, SGDClassifier
+from sklearn.naive_bayes import MultinomialNB, ComplementNB
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.svm import LinearSVC
 
@@ -125,15 +126,33 @@ if HAS_LIGHTGBM:
     )
 
 
+# Sentiment Analysis NLP Registry
+_SENTIMENT_REGISTRY: dict[str, tuple[type, dict]] = {
+    "multinomial_nb": (
+        MultinomialNB,
+        {"alpha": 1.0},
+    ),
+    "complement_nb": (
+        ComplementNB,
+        {"alpha": 1.0},
+    ),
+    "sgd_classifier": (
+        SGDClassifier,
+        {"loss": "log_loss", "penalty": "l2", "alpha": 1e-4, "max_iter": 1000},
+    ),
+}
+
 # Combined Registry
 _REGISTRY: dict[str, tuple[type, dict]] = {
     **_CLASSIFICATION_REGISTRY,
     **_REGRESSION_REGISTRY,
+    **_SENTIMENT_REGISTRY,
 }
 
 # Baseline set guaranteed per project
 BASELINE_MODELS = ["dummy_classifier", "logistic_regression", "random_forest"]
 BASELINE_REGRESSION_MODELS = ["dummy_regressor", "linear_regression", "random_forest_regressor"]
+BASELINE_SENTIMENT_MODELS = ["multinomial_nb", "logistic_regression", "linear_svm"]
 
 # Models that do NOT support predict_proba natively
 NO_PROBA_MODELS = {"linear_svm"}
@@ -158,6 +177,9 @@ SKLEARN_CLASS_MAP: dict[str, str] = {
     "xgboost_regressor":                 "XGBRegressor",
     "lightgbm":                          "LGBMClassifier",
     "lightgbm_regressor":                "LGBMRegressor",
+    "multinomial_nb":                    "MultinomialNB",
+    "complement_nb":                     "ComplementNB",
+    "sgd_classifier":                    "SGDClassifier",
 }
 
 
@@ -196,8 +218,18 @@ def list_models(task_type: str = "classification") -> list[str]:
     """Return available model keys based on task_type."""
     if task_type in ("regression", "regressor"):
         return list(_REGRESSION_REGISTRY.keys())
+    elif task_type in ("sentiment_analysis", "nlp"):
+        return ["multinomial_nb", "complement_nb", "logistic_regression", "linear_svm", "sgd_classifier"]
     return list(_CLASSIFICATION_REGISTRY.keys())
 
+
+def get_baseline_models(task_type: str = "classification") -> list[str]:
+    """Return appropriate baseline model keys for a given task type."""
+    if task_type == "regression":
+        return list(BASELINE_REGRESSION_MODELS)
+    elif task_type in ("sentiment_analysis", "nlp"):
+        return list(BASELINE_SENTIMENT_MODELS)
+    return list(BASELINE_MODELS)
 
 def is_regression_model(model_name: str) -> bool:
     """Return True if model_name is in regression registry."""

@@ -234,6 +234,24 @@ def explain_recommendation(rec: dict[str, Any]) -> dict[str, Any]:
             f"Aksi '{action_title}' disarankan agar estimasi bobot model regresi tidak terdistorsi secara ekstrim oleh data pencilan."
         )
 
+    # 8. Kategori Kebocoran Data (Data Leakage: Target Proxy & Identifier)
+    elif category in ("data_leakage", "leakage"):
+        leak_type = str(evidence.get("leakage_type") or evidence.get("type") or "").lower()
+        if "identifier" in leak_type or "id" in column.lower():
+            detail = (
+                f"Kolom '{column}' terdeteksi sebagai kolom identifikasi unik (Identifier). "
+                f"Kolom identifier tidak membawa pola prediktif dan menyebabkan model mengalami overfitting total "
+                f"(menghafal ID data latih). Menghapus kolom ini wajib dilakukan agar model tidak gagal saat memprediksi data baru."
+            )
+        else:
+            corr_val = evidence.get("correlation_value") or evidence.get("correlation") or ""
+            corr_str = f"nilai korelasi {corr_val}" if corr_val else "korelasi mendekati 1.0"
+            detail = (
+                f"Kolom '{column}' memiliki hubungan statistik yang terlalu ekstrem dengan target ({corr_str}). "
+                f"Fitur ini terindikasi kuat sebagai 'Target Proxy' (kebocoran informasi label yang tidak akan tersedia di produksi). "
+                f"Menghapus kolom ini krusial untuk mencegah ilusi akurasi semu dan memastikan model mampu melakukan generalisasi."
+            )
+
     else:
         detail = rationale or f"Rekomendasi {action_title} dihitung otomatis berdasarkan karakteristik statistik dataset."
 
@@ -264,8 +282,44 @@ def explain_recommendation(rec: dict[str, Any]) -> dict[str, Any]:
 
 
 # =============================================================================
+# =============================================================================
 # BAGIAN 2: RINGKASAN REKAPITULASI EKSPERIMEN (SUMMARIZE EXPERIMENTS)
 # =============================================================================
+
+MODEL_DISPLAY_NAMES: dict[str, str] = {
+    # Classification
+    "dummy_classifier": "Dummy Classifier",
+    "logistic_regression": "Logistic Regression",
+    "linear_svm": "Linear SVM",
+    "random_forest": "Random Forest Classifier",
+    "gradient_boosting": "Gradient Boosting Classifier",
+    "hist_gradient_boosting": "HistGrad Boost Classifier",
+    "knn": "K-Nearest Neighbors Classifier",
+    # Regression
+    "dummy_regressor": "Dummy Regressor",
+    "linear_regression": "Linear Regression",
+    "ridge": "Ridge Regression",
+    "random_forest_regressor": "Random Forest Regressor",
+    "gradient_boosting_regressor": "Gradient Boosting Regressor",
+    "hist_gradient_boosting_regressor": "HistGrad Boost Regressor",
+    "knn_regressor": "KNN Regressor",
+    "xgb_regressor": "XGBoost Regressor",
+    "lgbm_regressor": "LightGBM Regressor",
+}
+
+
+def format_model_display_name(raw_name: str | None) -> str:
+    """Konversi nama internal/teknis model ML ke nama tampilan yang jelas dan profesional."""
+    if not raw_name:
+        return "Model"
+    clean = str(raw_name).strip()
+    is_tuned = False
+    if clean.endswith("_tune"):
+        clean = clean[:-5]
+        is_tuned = True
+    display = MODEL_DISPLAY_NAMES.get(clean, clean.replace("_", " ").title())
+    return f"{display} (Tuned)" if is_tuned else display
+
 
 def summarize_experiments(
     experiments: list[dict[str, Any]],
@@ -274,7 +328,7 @@ def summarize_experiments(
     task_type: str = "classification",
 ) -> dict[str, Any]:
     """
-    Merangkum hasil benchmarking eksperimen model ML menjadi laporan analitis ringkas.
+    Merangkum hasil benchmarking eksperimen model ML menjadi laporan analitis ringkas dan mudah dipahami.
     Mendukung tugas Klasifikasi (F1, Accuracy, ROC-AUC) maupun Regresi (R², RMSE, MAE).
     """
     completed = [e for e in experiments if e.get("status") == "completed"]
@@ -311,26 +365,51 @@ def summarize_experiments(
 
         sorted_exps = sorted(completed, key=get_r2, reverse=True)
         best = sorted_exps[0]
-        best_name = best.get("model_name", "Model Best")
+        best_raw_name = best.get("model_name", "Model Best")
+        best_name = format_model_display_name(best_raw_name)
         best_r2 = get_r2(best)
         best_rmse = _get_metric_val(best, ("rmse_mean", "rmse"))
         best_mae = _get_metric_val(best, ("mae_mean", "mae"))
 
-        rmse_str = f", RMSE: {best_rmse:.4f}" if best_rmse is not None else ""
-        mae_str = f", MAE: {best_mae:.4f}" if best_mae is not None else ""
+        rmse_str = f", RMSE: {best_rmse:,.4f}" if best_rmse is not None else ""
+        mae_str = f", MAE: {best_mae:,.4f}" if best_mae is not None else ""
 
         headline = f"🏆 {best_name} meraih performa tertinggi dengan R² Score {best_r2:.4f}"
+        
+        unique_algos = {str(e.get("model_name", "")).replace("_tune", "") for e in completed if e.get("model_name")}
+        total_runs = len(completed)
+
+        if total_runs > len(unique_algos):
+            count_desc = f"Dari total {total_runs} eksperimen benchmarking ({len(unique_algos)} arsitektur algoritma)"
+        else:
+            count_desc = f"Dari total {total_runs} model regresi yang berhasil dievaluasi"
+
+        r2_pct = max(0.0, best_r2 * 100) if best_r2 > -1 else 0.0
+        r2_expl = f" (menjelaskan ~{r2_pct:.1f}% variasi data)" if best_r2 > 0 else ""
+
         narrative = (
-            f"Dari total {len(completed)} model regresi yang berhasil dievaluasi untuk target kontinu '{target_column}', "
-            f"**{best_name}** mencatat kemampuan prediksi terbaik dengan rata-rata R² Score sebesar **{best_r2:.4f}**{rmse_str}{mae_str}. "
+            f"{count_desc} untuk target kontinu '{target_column}', "
+            f"**{best_name}** mencatat kemampuan prediksi terbaik dengan rata-rata R² Score sebesar **{best_r2:.4f}**{r2_expl}{rmse_str}{mae_str}. "
         )
 
-        if len(sorted_exps) > 1:
-            runner_up = sorted_exps[1]
-            ru_name = runner_up.get("model_name", "")
-            ru_r2 = get_r2(runner_up)
+        # Cari runner-up dari arsitektur model yang BERBEDA agar tidak membandingkan model yang sama
+        best_base_algo = str(best_raw_name).replace("_tune", "")
+        distinct_runner_up = next(
+            (e for e in sorted_exps[1:] if str(e.get("model_name", "")).replace("_tune", "") != best_base_algo),
+            None,
+        )
+
+        if distinct_runner_up:
+            ru_raw = distinct_runner_up.get("model_name", "")
+            ru_name = format_model_display_name(ru_raw)
+            ru_r2 = get_r2(distinct_runner_up)
             diff = best_r2 - ru_r2
-            narrative += f"Model terbaik kedua adalah **{ru_name}** dengan R² Score {ru_r2:.4f} (selisih {diff:.4f})."
+            if diff > 0.0005:
+                narrative += f"Sebagai perbandingan, model alternatif terbaik berikutnya adalah **{ru_name}** dengan R² Score {ru_r2:.4f} (terpaut selisih {diff:.4f} di bawah {best_name})."
+            else:
+                narrative += f"Model alternatif **{ru_name}** memiliki performa yang sangat kompetitif dengan R² Score {ru_r2:.4f}."
+        elif total_runs > 1:
+            narrative += f"Eksperimen yang dievaluasi berfokus pada eksplorasi konfigurasi dan hyperparameter untuk arsitektur **{best_name}**."
 
         strengths = [
             f"R² Score tertinggi ({best_r2:.4f}) pada Cross-Validation K-Fold",
@@ -338,11 +417,14 @@ def summarize_experiments(
             "Pipeline preprocessing terisolasi bebas dari kebocoran data (data leakage)",
         ]
         if best_rmse is not None:
-            strengths.append(f"Root Mean Squared Error (RMSE): {best_rmse:.4f}")
+            strengths.append(f"Root Mean Squared Error (RMSE): {best_rmse:,.4f}")
+        if best_mae is not None:
+            strengths.append(f"Mean Absolute Error (MAE): {best_mae:,.4f}")
 
+        cand_name = format_model_display_name(candidate.get("model_name")) if candidate and candidate.get("model_name") else "Belum dipilih"
         takeaways = [
-            f"Total model selesai: {len(completed)} | Gagal: {len(failed)}",
-            f"Kandidat terpilih saat ini: {candidate.get('model_name') if candidate else 'Belum dipilih'}",
+            f"Total eksperimen selesai: {len(completed)} | Gagal: {len(failed)}",
+            f"Kandidat model aktif: {cand_name}",
             "Tinjau sebaran titik Residual pada grafik Actual vs Predicted di Halaman Hasil.",
         ]
 
@@ -367,7 +449,8 @@ def summarize_experiments(
 
         sorted_exps = sorted(completed, key=get_f1, reverse=True)
         best = sorted_exps[0]
-        best_name = best.get("model_name", "Model Best")
+        best_raw_name = best.get("model_name", "Model Best")
+        best_name = format_model_display_name(best_raw_name)
         best_f1 = get_f1(best)
 
         best_acc = _get_metric_val(best, ("accuracy_mean", "accuracy"))
@@ -377,17 +460,37 @@ def summarize_experiments(
         auc_str = f", ROC-AUC: {best_auc*100:.2f}%" if best_auc is not None else ""
 
         headline = f"🏆 {best_name} meraih performa tertinggi dengan F1-Score {best_f1*100:.2f}%"
+
+        unique_algos = {str(e.get("model_name", "")).replace("_tune", "") for e in completed if e.get("model_name")}
+        total_runs = len(completed)
+
+        if total_runs > len(unique_algos):
+            count_desc = f"Dari total {total_runs} eksperimen benchmarking ({len(unique_algos)} arsitektur algoritma)"
+        else:
+            count_desc = f"Dari total {total_runs} model klasifikasi yang berhasil dievaluasi"
+
         narrative = (
-            f"Dari total {len(completed)} model klasifikasi yang berhasil dievaluasi untuk target '{target_column}', "
+            f"{count_desc} untuk target '{target_column}', "
             f"**{best_name}** mengungguli model lainnya dengan rata-rata F1-Score sebesar **{best_f1*100:.2f}%**{acc_str}{auc_str}. "
         )
 
-        if len(sorted_exps) > 1:
-            runner_up = sorted_exps[1]
-            ru_name = runner_up.get("model_name", "")
-            ru_f1 = get_f1(runner_up)
+        best_base_algo = str(best_raw_name).replace("_tune", "")
+        distinct_runner_up = next(
+            (e for e in sorted_exps[1:] if str(e.get("model_name", "")).replace("_tune", "") != best_base_algo),
+            None,
+        )
+
+        if distinct_runner_up:
+            ru_raw = distinct_runner_up.get("model_name", "")
+            ru_name = format_model_display_name(ru_raw)
+            ru_f1 = get_f1(distinct_runner_up)
             diff = (best_f1 - ru_f1) * 100
-            narrative += f"Model terbaik kedua adalah **{ru_name}** dengan F1-Score {ru_f1*100:.2f}% (selisih {diff:.2f}%)."
+            if diff > 0.05:
+                narrative += f"Sebagai perbandingan, model alternatif terbaik berikutnya adalah **{ru_name}** dengan F1-Score {ru_f1*100:.2f}% (selisih {diff:.2f}% di bawah {best_name})."
+            else:
+                narrative += f"Model alternatif **{ru_name}** memiliki performa yang sangat kompetitif dengan F1-Score {ru_f1*100:.2f}%."
+        elif total_runs > 1:
+            narrative += f"Eksperimen yang dievaluasi berfokus pada variasi konfigurasi hyperparameter untuk arsitektur **{best_name}**."
 
         strengths = [
             f"F1-Score tertinggi ({best_f1*100:.2f}%) pada Stratified Cross-Validation",
@@ -396,10 +499,13 @@ def summarize_experiments(
         ]
         if best_acc is not None:
             strengths.append(f"Akurasi klasifikasi: {best_acc*100:.2f}%")
+        if best_auc is not None:
+            strengths.append(f"ROC-AUC: {best_auc*100:.2f}%")
 
+        cand_name = format_model_display_name(candidate.get("model_name")) if candidate and candidate.get("model_name") else "Belum dipilih"
         takeaways = [
-            f"Total model selesai: {len(completed)} | Gagal: {len(failed)}",
-            f"Kandidat terpilih saat ini: {candidate.get('model_name') if candidate else 'Belum dipilih'}",
+            f"Total eksperimen selesai: {len(completed)} | Gagal: {len(failed)}",
+            f"Kandidat model aktif: {cand_name}",
             "Disarankan untuk mengunduh kode Python (.py) untuk reproduksi hasil.",
         ]
 

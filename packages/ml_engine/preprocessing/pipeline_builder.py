@@ -27,9 +27,9 @@ from sklearn.preprocessing import (
     RobustScaler,
     StandardScaler,
 )
-
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from preprocessing.transformers import FrequencyEncoder, Winsorizer
-
+from preprocessing.text_transformers import TextCleanerTransformer, get_sentiment_stopwords
 
 # =============================================================================
 # BAGIAN 1: PEMETAAN AKSI USER (DECISION) KE OBJEK SCIKIT-LEARN
@@ -130,8 +130,8 @@ def build_pipeline(
 
     numeric_cols: list[str] = []
     categorical_cols: list[str] = []
+    text_cols: list[str] = []
     drop_cols: set[str] = set()
-
     # 2. Pengelompokan jenis kolom & pengidentifikasian kolom yang dibuang (drop)
     for f in profile_features:
         col_decisions = idx.get(f.name, {})
@@ -141,28 +141,30 @@ def build_pipeline(
         encoding_action = col_decisions.get("encoding", "one_hot_encoding")
         scaling_action = col_decisions.get("scaling", "standard_scaling")
 
-        # Jika aksi user memilih drop_column
-        if missing_action == "drop_column" or encoding_action == "drop_column":
+        # Jika aksi user memilih drop_column pada kategori APAPUN (data_leakage, missing_value, encoding, dll)
+        if any(action == "drop_column" for action in col_decisions.values()):
             drop_cols.add(f.name)
             continue
 
-        # Klasifikasikan fitur ke numerik atau kategorikal
+        # Klasifikasikan fitur ke numerik, kategorikal, atau teks
         if f.dtype == "numeric" and not f.constant:
             numeric_cols.append(f.name)
         elif f.dtype in ("categorical", "boolean") and not f.constant:
             categorical_cols.append(f.name)
+        elif f.dtype == "text" and not f.constant:
+            text_cols.append(f.name)
         # Catatan: Kolom konstanta, datetime, atau ID dilompati
-
     transformers = []
     config_json: dict[str, Any] = {
         "numeric_columns": numeric_cols,
         "categorical_columns": categorical_cols,
+        "text_columns": text_cols,
         "dropped_columns": list(drop_cols),
         "numeric_config": {},
         "categorical_config": {},
+        "text_config": {},
         "enable_feature_engineering": enable_feature_engineering,
     }
-
     # 3. Membangun Sub-Pipeline untuk Kolom Numerik
     if numeric_cols:
         for col in numeric_cols:
@@ -229,6 +231,26 @@ def build_pipeline(
                 "encoding": col_encoding,
             }
 
+    # 4b. Membangun Sub-Pipeline untuk Kolom Teks (NLP / Sentimen)
+    if text_cols:
+        for col in text_cols:
+            col_pipe = Pipeline([
+                ("cleaner", TextCleanerTransformer(lowercase=True)),
+                ("vectorizer", TfidfVectorizer(
+                    ngram_range=(1, 2),
+                    min_df=2,
+                    sublinear_tf=True,
+                    stop_words=get_sentiment_stopwords(),
+                )),
+            ])
+            transformers.append((f"text_{col}", col_pipe, col))
+            config_json["text_config"][col] = {
+                "vectorizer": "tfidf",
+                "ngram_range": [1, 2],
+                "min_df": 2,
+                "sublinear_tf": True,
+            }
+
     # 5. Menggabungkan Semua Preprocessing dengan ColumnTransformer
     preprocessor = ColumnTransformer(
         transformers=transformers,
@@ -285,4 +307,52 @@ def get_pipeline_steps_description(pipeline: Pipeline) -> list[str]:
     steps.append(f"model: {model_name}")
     return steps
 
+
+
+def build_nlp_sentiment_pipeline(
+    text_column: str,
+    model_estimator: Any,
+    vectorizer_type: str = "tfidf",
+    ngram_range: tuple[int, int] = (1, 2),
+    min_df: int | float = 2,
+    sublinear_tf: bool = True,
+) -> tuple[Pipeline, dict[str, Any]]:
+    """
+    Construct a dedicated NLP sentiment pipeline for a single text column.
+    Guarantees strict zero-leakage fold fitting.
+    """
+    cleaner = TextCleanerTransformer(lowercase=True)
+    if vectorizer_type == "count":
+        vectorizer = CountVectorizer(
+            ngram_range=ngram_range,
+            min_df=min_df,
+            stop_words=get_sentiment_stopwords(),
+        )
+    else:
+        vectorizer = TfidfVectorizer(
+            ngram_range=ngram_range,
+            min_df=min_df,
+            sublinear_tf=sublinear_tf,
+            stop_words=get_sentiment_stopwords(),
+        )
+
+    pipeline = Pipeline([
+        ("cleaner", cleaner),
+        ("vectorizer", vectorizer),
+        ("model", model_estimator),
+    ])
+
+    config_json = {
+        "task_type": "sentiment_analysis",
+        "text_column": text_column,
+        "vectorizer": vectorizer_type,
+        "ngram_range": list(ngram_range),
+        "min_df": min_df,
+        "sublinear_tf": sublinear_tf,
+        "model": {
+            "name": type(model_estimator).__name__,
+            "params": model_estimator.get_params(),
+        },
+    }
+    return pipeline, config_json
 

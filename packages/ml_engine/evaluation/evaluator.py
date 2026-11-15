@@ -107,6 +107,7 @@ def run_cross_validation(
     n_splits: int = 5,
     random_seed: int = 42,
     task_type: str = "classification",
+    cv_splits: list[tuple[np.ndarray, np.ndarray]] | None = None,
 ) -> EvaluationResult:
     """
     Run K-Fold (or Stratified K-Fold for classification) CV.
@@ -122,6 +123,8 @@ def run_cross_validation(
         n_splits: Number of CV folds.
         random_seed: Controls fold splitting.
         task_type: "classification" or "regression".
+        cv_splits: Optional pre-generated list of (train_idx, val_idx) splits
+                   to guarantee identical fold partitions across comparisons.
 
     Returns:
         EvaluationResult with per-fold metrics and summary stats.
@@ -130,22 +133,31 @@ def run_cross_validation(
 
     is_reg = task_type == "regression" or is_regression_model(model_name)
 
-    if is_reg:
+    if cv_splits is not None:
+        splits_iterator = cv_splits
+        is_binary = len(sorted(y.unique())) == 2 if not is_reg else False
+        can_proba = supports_proba(model_name) if not is_reg else False
+        actual_splits_count = len(cv_splits)
+    elif is_reg:
         cv_splitter = KFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+        splits_iterator = list(cv_splitter.split(X, y))
         is_binary = False
         can_proba = False
+        actual_splits_count = n_splits
     else:
         cv_splitter = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+        splits_iterator = list(cv_splitter.split(X, y))
         classes = sorted(y.unique())
         is_binary = len(classes) == 2
         can_proba = supports_proba(model_name)
+        actual_splits_count = n_splits
 
     fold_results: list[FoldResult] = []
     all_y_true: list = []
     all_y_pred: list = []
     total_start = time.time()
 
-    for fold_idx, (train_idx, val_idx) in enumerate(cv_splitter.split(X, y)):
+    for fold_idx, (train_idx, val_idx) in enumerate(splits_iterator):
         X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
         y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
 
@@ -214,7 +226,7 @@ def run_cross_validation(
 
     return EvaluationResult(
         model_name=model_name,
-        cv_folds=n_splits,
+        cv_folds=actual_splits_count,
         fold_results=fold_results,
         summary=summary,
         confusion_matrix=cm,

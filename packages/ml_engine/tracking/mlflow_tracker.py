@@ -11,7 +11,9 @@ from __future__ import annotations
 import logging
 import os
 import pickle
+import socket
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     from experiments.runner import ExperimentRecord
@@ -29,6 +31,17 @@ def is_mlflow_available() -> bool:
         import mlflow  # noqa: F401
         return True
     except ImportError:
+        return False
+
+def _is_server_reachable(url: str, timeout: float = 0.5) -> bool:
+    """Mengecek apakah server HTTP/HTTPS tujuan aktif tanpa memicu timeout panjang."""
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
         return False
 
 
@@ -66,6 +79,9 @@ def log_experiment_to_mlflow(
     os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
 
     uri = tracking_uri or os.getenv("MLFLOW_TRACKING_URI", "./mlruns")
+    if uri.startswith(("http://", "https://")) and not _is_server_reachable(uri):
+        logger.info(f"MLflow server at {uri} is unreachable. Skipping MLflow logging.")
+        return False
     try:
         # 2. Atur Server Target & Nama Eksperimen
         mlflow.set_tracking_uri(uri)

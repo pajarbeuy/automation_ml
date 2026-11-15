@@ -209,6 +209,15 @@ def run_experiment(
         final_pipeline = clone(pipeline)
         final_pipeline.fit(X, y)
 
+        if task_type in ("sentiment_analysis", "nlp"):
+            try:
+                from assistant.text_explainer import extract_global_word_attributions
+                metrics_data["word_attributions"] = extract_global_word_attributions(final_pipeline)
+                with open(metrics_path, "w") as f:
+                    json.dump(metrics_data, f, indent=2)
+            except Exception:
+                pass
+
         model_path = str(artifact_dir / "pipeline.pkl")
         with open(model_path, "wb") as f:
             pickle.dump(final_pipeline, f)

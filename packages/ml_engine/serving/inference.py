@@ -112,7 +112,7 @@ def predict(
     has_proba = False
     probabilities = None
     classes = None
-    if task_type == "classification" and hasattr(pipeline, "predict_proba"):
+    if task_type in ("classification", "sentiment_analysis", "nlp") and hasattr(pipeline, "predict_proba"):
         try:
             probabilities = pipeline.predict_proba(df)
             has_proba = True
@@ -152,6 +152,18 @@ def predict(
                         str(cls): round(float(p), 4)
                         for cls, p in zip(classes, row_probs)
                     }
+            if task_type in ("sentiment_analysis", "nlp"):
+                try:
+                    from assistant.text_explainer import explain_sentence_sentiment
+                    text_val = ""
+                    for col in df.columns:
+                        val = str(df.iloc[i][col])
+                        if len(val) > len(text_val):
+                            text_val = val
+                    if text_val:
+                        expl = explain_sentence_sentiment(pipeline, text_val)
+                        row_res["contributing_words"] = expl.get("contributing_words", [])
+                except Exception:
+                    pass
             results.append(row_res)
-
     return results
