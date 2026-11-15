@@ -68,6 +68,38 @@ def test_explain_recommendation_scaling_standard():
     assert "income" in exp["headline"]
 
 
+def test_explain_recommendation_data_leakage_proxy():
+    rec = {
+        "category": "data_leakage",
+        "column_name": "leaked_feature",
+        "recommendation": "drop_column",
+        "score": 95,
+        "evidence": {"leakage_type": "target_proxy", "correlation_value": "0.992"},
+        "rationale": "High correlation with target.",
+    }
+    exp = explain_recommendation(rec)
+
+    assert "Drop Column" in exp["action_title"]
+    assert "leaked_feature" in exp["headline"]
+    assert "Target Proxy" in exp["detailed_explanation"]
+
+
+def test_explain_recommendation_data_leakage_identifier():
+    rec = {
+        "category": "data_leakage",
+        "column_name": "user_id",
+        "recommendation": "drop_column",
+        "score": 95,
+        "evidence": {"leakage_type": "identifier", "unique_ratio": "1.0"},
+        "rationale": "Unique identifier column.",
+    }
+    exp = explain_recommendation(rec)
+
+    assert "Drop Column" in exp["action_title"]
+    assert "user_id" in exp["headline"]
+    assert "Identifier" in exp["detailed_explanation"]
+
+
 def test_summarize_experiments_finds_best_classification():
     exps = [
         {
@@ -134,6 +166,57 @@ def test_summarize_experiments_regression():
     assert summary["best_metric_name"] == "R²"
     assert "2.1000" in summary["narrative"]
     assert len(summary["strengths"]) > 0
+
+
+def test_summarize_experiments_deduplicates_runner_up_and_formats_display_name():
+    """Verify that multiple runs of the same algorithm do not declare the same model as runner-up with 0 diff."""
+    exps = [
+        {
+            "model_name": "gradient_boosting_regressor",
+            "status": "completed",
+            "training_time_seconds": 1.2,
+            "metrics": [
+                {"name": "r2_mean", "value": 0.8273, "split": "cv"},
+                {"name": "rmse_mean", "value": 218589.8038, "split": "cv"},
+                {"name": "mae_mean", "value": 27049.6202, "split": "cv"},
+            ],
+        },
+        {
+            "model_name": "gradient_boosting_regressor",
+            "status": "completed",
+            "training_time_seconds": 1.1,
+            "metrics": [
+                {"name": "r2_mean", "value": 0.8273, "split": "cv"},
+                {"name": "rmse_mean", "value": 218589.8038, "split": "cv"},
+                {"name": "mae_mean", "value": 27049.6202, "split": "cv"},
+            ],
+        },
+        {
+            "model_name": "linear_regression",
+            "status": "completed",
+            "training_time_seconds": 0.3,
+            "metrics": [
+                {"name": "r2_mean", "value": 0.6521, "split": "cv"},
+                {"name": "rmse_mean", "value": 310000.0, "split": "cv"},
+                {"name": "mae_mean", "value": 45000.0, "split": "cv"},
+            ],
+        },
+    ]
+
+    summary = summarize_experiments(
+        experiments=exps,
+        candidate={"model_name": "gradient_boosting_regressor"},
+        target_column="price",
+        task_type="regression",
+    )
+
+    # Nama model harus terformat rapi dan profesional
+    assert summary["best_model_name"] == "Gradient Boosting Regressor"
+    assert "Gradient Boosting Regressor" in summary["headline"]
+    assert "selisih 0.0000" not in summary["narrative"]
+    assert "Linear Regression" in summary["narrative"]
+    assert "218,589.8038" in summary["narrative"]
+    assert "Gradient Boosting Regressor" in summary["takeaways"][1]
 
 
 def test_suggest_next_step():

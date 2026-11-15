@@ -407,3 +407,40 @@ class TestLeakageIntegrationWithEngine:
             # Nilai harus serializable (tidak ada NaN, float infinity, dll)
             assert isinstance(d["score"], float)
             assert isinstance(d["confidence"], float)
+
+    def test_leakage_drop_decision_removes_column_from_pipeline(self, df_with_proxy_binary):
+        """
+        Integrasi End-to-End:
+        Rekomendasi data_leakage (drop_column) yang disetujui user HARUS
+        benar-benar membuang kolom bocor dari pipeline training scikit-learn.
+        """
+        from sklearn.dummy import DummyClassifier
+        from ml_engine.preprocessing.pipeline_builder import build_pipeline
+
+        profile = profile_dataset(df_with_proxy_binary, target_column="target")
+        recs = generate_recommendations(df_with_proxy_binary, profile, task_type="classification")
+
+        leakage_rec = next(r for r in recs if r.category == "data_leakage" and r.column == "leaked_flag")
+        assert leakage_rec.recommended_action == "drop_column"
+
+        # Simulasikan persetujuan user terhadap rekomendasi leakage
+        decisions = [
+            {
+                "category": leakage_rec.category,
+                "column_name": leakage_rec.column,
+                "selected_action": leakage_rec.recommended_action,
+            }
+        ]
+
+        pipeline, config = build_pipeline(decisions, profile.features, DummyClassifier())
+
+        # Verifikasi kolom bocor masuk ke dropped_columns dan hilang dari fitur training
+        assert "leaked_flag" in config["dropped_columns"]
+        assert "leaked_flag" not in config["numeric_columns"]
+        assert "leaked_flag" not in config["categorical_columns"]
+
+        # Pipeline harus bisa fit tanpa error dan tanpa menyertakan kolom leaked_flag
+        X = df_with_proxy_binary.drop(columns=["target"])
+        y = df_with_proxy_binary["target"]
+        pipeline.fit(X, y)
+
