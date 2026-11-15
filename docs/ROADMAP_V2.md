@@ -273,8 +273,8 @@ The system must allow the user to override automatic task detection.
 -   [x] High-cardinality categorical features
 -   [x] Invalid values
 -   [ ] Impossible values
--   [ ] Potential leakage
--   [ ] ID-like columns
+-   [x] Potential leakage
+-   [x] ID-like columns
 
 ## 1.5 Numerical Analysis
 
@@ -422,7 +422,7 @@ Applicable to both classification and regression where appropriate.
 
 -   [x] One-hot encoding
 -   [x] Ordinal encoding
--   [ ] Frequency encoding
+-   [x] Frequency encoding
 -   [x] High-cardinality warning
 
 ### Scaling
@@ -1429,9 +1429,9 @@ Prioritize the intelligence and correctness layer:
 6.  [x] Evidence-based recommendation schema
 7.  [x] Task-aware CV selection
 8.  [x] Regression target analysis
-9.  [ ] Leakage detection
-10. [ ] Candidate treatment evaluation
-11. [ ] Recommendation validation through experiments
+9.  [x] Leakage detection
+10. [x] Candidate treatment evaluation
+11. [x] Recommendation validation through experiments
 
 After these are stable:
 

@@ -5,11 +5,11 @@
 **Working name:** AutoML Human-in-the-Loop
 
 **Category:** ML workflow automation / assisted AutoML
+**Primary domain:** Tabular machine learning & Natural Language Processing (NLP)
 
-**Primary domain:** Tabular machine learning
+**Supported tasks:** Classification, Regression, and Text Sentiment Analysis
 
-**Supported tasks:** Classification and Regression
-
+**Enterprise features:** Multi-tenant workspace isolation, Role-Based Access Control (RBAC), Cloud Object Storage (AWS S3 / MinIO), Distributed Asynchronous Job Workers, and Meta-Learning Recommendation Ranker.
 ## 2. Problem statement
 
 Building a tabular ML model repeatedly involves the same operational work:
@@ -70,10 +70,10 @@ Create a workspace where a user can move from raw tabular data to a validated, r
 ### Secondary goals
 
 - teach users why a treatment is recommended
-- provide experiment history
-- support future AI-assisted explanations
-- provide a foundation for regression and more advanced AutoML
-
+- provide experiment history and meta-learning ranker from past runs
+- support AI-assisted natural language explanations and guidance
+- provide end-to-end sentiment classification with word attribution
+- serve models with uncertainty quantification and native data drift monitoring
 ## 5. Non-goals
 
 The product will not claim to:
@@ -84,6 +84,7 @@ The product will not claim to:
 - automatically delete anomalous observations without approval
 - use an LLM as the statistical decision engine
 - solve every ML modality in the first release
+- replace specialized large generative LLM training (focus is deterministic classification & efficient tabular/NLP models)
 
 ## 6. Target users
 
@@ -474,3 +475,29 @@ The MVP is complete when a user can:
 8. Compare them using cross-validation.
 9. Select a candidate based on a defined objective.
 10. Export the complete pipeline and experiment configuration.
+
+## 14. Autonomous Sentiment Analysis Extension
+
+### 14.1 Scope
+Expand tabular capabilities to handle unstructured text datasets where target is sentiment polarity (`positive`, `negative`, `neutral` or scalar score).
+
+### 14.2 Core NLP Capabilities
+1. **Text Profiling**:
+   - Character length, token length, unique vocabulary size, lexical diversity (Type-Token Ratio / TTR).
+   - Stopword ratio, punctuation density, emoji frequency, out-of-vocabulary (OOV) risk.
+2. **Leakage-Safe NLP Pipelines**:
+   - `TfidfVectorizer` / `CountVectorizer` integrated into `ColumnTransformer`.
+   - Text cleaning (case folding, URL/HTML stripping, punctuation normalization).
+   - Vocabulary fitted **strictly on training fold**, never on validation or global data.
+3. **Candidate Strategy Generation & Evaluation**:
+   - *Recommended*: Standard text normalization + sublinear TF-IDF + unigram/bigram `(1, 2)` + min_df pruning.
+   - *Baseline*: Minimal tokenization + raw CountVectorizer (unigram only).
+   - *Alternative*: Stopword retention (negation-aware) + sublinear TF + character n-grams `(3, 5)` for typo tolerance.
+4. **NLP Estimator Tournament**:
+   - `MultinomialNB`, `ComplementNB`, `LogisticRegression` (L2/ElasticNet), `LinearSVC`, `SGDClassifier`.
+   - Evaluated via `StratifiedKFold` CV with F1-Macro, Precision, Recall, Accuracy, ROC-AUC.
+5. **Explainability & Attribution**:
+   - Feature log-probabilities / linear coefficients extracted to surface top-15 positive and top-15 negative word attributions.
+6. **Serving & Drift Monitoring**:
+   - Single/batch text inference with sentiment class + confidence probability.
+   - Out-of-Vocabulary (OOV) rate drift and token length shift detection.

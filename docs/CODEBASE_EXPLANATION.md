@@ -22,7 +22,7 @@ ml-autonomus/
 │       ├── profiling/            # Deteksi profil dataset (kolom, statistik, skewness)
 │       ├── detection/            # Detector spesifik (missing, outlier, class imbalance, data leakage)
 │       ├── eda/                  # Generator chart/grafik untuk visualisasi data
-│       ├── recommendations/      # Engine penentu rekomendasi preprocessing deterministik
+│       ├── recommendations/      # Engine rekomendasi per-kolom & generator/evaluator kandidat strategi holistik (candidate_evaluator.py)
 │       ├── preprocessing/        # Pembentuk scikit-learn Pipeline (Winsorizer, FrequencyEncoder)
 │       ├── models/               # Registri algoritma model (RandomForest, LogisticRegression, dll)
 │       ├── evaluation/           # Evaluator Cross-Validation (K-Fold, StratifiedKFold)
@@ -45,7 +45,7 @@ ml-autonomus/
 │       │   ├── api/client.ts     # Helper panggilan API Backend (axios)
 │       │   ├── components/       # Komponen UI (Sidebar, AIAssistantWidget)
 │       │   └── pages/            # 7 Halaman Alur Kerja (Upload, EDA, Treatment, Result/Serving, dll)
-├── tests/                        # 🧪 UNIT TESTS (112 test Pytest, 100% Passed)
+├── tests/                        # 🧪 UNIT & CONTRACT TESTS (136 fast tests / 142 total, 100% Passed)
 ├── Dockerfile & docker-compose   # 🐳 Containerization Production Setup (WSL Docker)
 └── docs/                         # 📚 DOKUMENTASI LENGKAP
 ```
@@ -75,15 +75,22 @@ Modul ini adalah **otak utama machine learning**. Kode di dalam folder ini tidak
   - *Target Proxy Detection*: Menghitung korelasi Pearson + Spearman (numerik), Point-Biserial (target biner), dan Cramér's V (kategorikal). Threshold: 0.95 (numerik) / 0.90 (kategorikal).
   - *Severity*: `critical` (≥ 0.98 / identifier), `high` (≥ 0.95), `medium` (≥ threshold).
 
-#### 3. `recommendations/engine.py`
-- **Fungsi Utama**: *Decision Engine* yang menentukan rekomendasi pra-pemrosesan data berdasarkan bukti statistik.
-- **Aturan Keputusan (Contoh)**:
-  - Jika skewness > 1.0 pada data numerik yang ber-outlier → Rekomendasikan `median_imputation` & `robust_scaling`.
-  - Jika data kategorikal memiliki nilai unik sedikit → Rekomendasikan `one_hot_encoding`.
-  - Setiap rekomendasi diberi skor keyakinan (*confidence score* 0–100) dan bukti statistik (*evidence*).
+#### 3. `recommendations/` (`engine.py`, `candidate_evaluator.py`)
+- **`engine.py` (Decision Engine Per-Kolom)**: Menentukan rekomendasi pra-pemrosesan data deterministik berdasarkan bukti statistik profiling.
+  - *Aturan Keputusan*: Skewness > 1.0 pada data numerik yang ber-outlier memicu `median_imputation` & `robust_scaling`. Data kategorikal kardinalitas rendah memicu `one_hot_encoding`. Kolom terdeteksi kebocoran data (*data leakage*) memicu `drop_column` prioritas utama. Setiap item dilengkapi *confidence score* (0–100) dan *evidence*.
+- **`candidate_evaluator.py` (Candidate Strategy Generation & Empirical Validation)**:
+  - *Candidate Generation (`generate_treatment_candidates`)*: Membentuk 3 strategi pipeline holistik:
+    1. **Recommended**: Mengikuti seluruh rekomendasi heuristik + membuang kebocoran data (*target proxy* & *identifier*).
+    2. **Baseline**: Preprocessing minimalis (imputasi median/most-frequent standar tanpa outlier clipping / frequency encoder) dengan isolasi kolom leakage agar baseline tidak curang memprediksi target via ID/proxy.
+    3. **Alternative**: Preprocessing alternatif (misal *quantile clipping*, *robust/min-max scaling*, dan encoding frekuensi/ordinal).
+  - *Empirical Evaluation (`evaluate_treatment_candidates`)*:
+    - Menjalankan 3-Fold Cross-Validation menggunakan reference estimator cepat (`LogisticRegression(max_iter=500)` untuk klasifikasi, `Ridge()` untuk regresi) selesai dalam waktu < 2 detik.
+    - Menghitung **Treatment Lift**: $\Delta = \text{Score}_{\text{rec}} - \text{Score}_{\text{base}}$ serta status validasi (`VALIDATED` jika lift > 0.005, `NEUTRAL` jika dalam rentang $\pm 0.005$, dan `SUBOPTIMAL` jika < -0.005).
+    - Memastikan *zero data leakage* antar training & validation fold pada benchmark.
 
 #### 4. `preprocessing/` (`pipeline_builder.py`, `transformers.py`, `feature_engineering.py`)
 - **Fungsi Utama**: Membangun `ColumnTransformer` dan `Pipeline` scikit-learn secara otomatis dari keputusan user.
+- **Eksekusi Drop Column Menyeluruh**: `pipeline_builder.py` mengecek semua aksi `drop_column` dari seluruh kategori (termasuk `data_leakage`, `missing_value`, `encoding`) menggunakan `any(action == "drop_column" for action in col_decisions.values())`, memastikan kolom bocor atau kolom ID terhapus bersih dari `numeric_columns` / `categorical_columns` sebelum pipeline scikit-learn dikonstruksi.
 - **Custom Transformers**:
   - `AutoFeatureEngineer`: Mengaplikasikan transformasi `log1p` pada kolom numerik yang sangat miring dan menghasilkan fitur interaksi produk antar fitur numerik utama.
   - `Winsorizer`: Pemotong nilai outlier ekstrem ke batas IQR tanpa menghapus baris.
@@ -110,8 +117,12 @@ Modul ini adalah **otak utama machine learning**. Kode di dalam folder ini tidak
 
 #### 10. `assistant/` (`explainer.py`, `llm_provider.py`)
 - **`explainer.py` (Fungsi Utama)**: Engine *Natural Language Generation* (NLG) deterministik murni berbasis aturan sesuai keputusan **ADR-003**. Bekerja tanpa ketergantungan model/API pihak ketiga, menghasilkan penjelasan instan (<1ms) dan 100% akurat berbasis statistik nyata:
-  - **Penjelasan Rekomendasi ("Why was this recommended?")**: Mengurai bukti statistik profiling (`missing_rate`, `skewness`, `outlier_rate`, `cardinality`, `sample_size`) untuk menjelaskan alasan ilmiah pemilihan tindakan (misal: kenapa Median dipilih dibanding Mean karena distribusi miring/adanya outlier).
-  - **Ringkasan Eksperimen Multi-Task**: Merangkum hasil evaluasi model secara kontekstual baik untuk Klasifikasi (perankingan F1-Score, Akurasi, ROC-AUC) maupun Regresi (perankingan $R^2$ Score, RMSE, dan MAE).
+  - **Penjelasan Rekomendasi ("Why was this recommended?")**: Mengurai bukti statistik profiling (`missing_rate`, `skewness`, `outlier_rate`, `cardinality`, `sample_size`) untuk menjelaskan alasan ilmiah pemilihan tindakan, termasuk edukasi bahaya *Target Proxy* dan *Identifier* pada kategori kebocoran data (*data leakage*).
+  - **Ringkasan Eksperimen Multi-Task Cerdas (`summarize_experiments`)**:
+    - Konversi nama teknis model menjadi nama tampilan profesional (*Title Case*, misal `Gradient Boosting Regressor`).
+    - Penyaringan runner-up strictly dari arsitektur algoritma yang **berbeda** (mencegah kejanggalan perbandingan model identik dengan selisih 0.0000).
+    - Format angka ribuan dengan koma (`RMSE: 218,589.8038`) dan penjelasan intuitif persentase variansi data untuk $R^2$.
+    - Mengembalikan struktur kaya (`strengths`, `takeaways`, dan status model kandidat aktif).
   - **Panduan Alur Kerja (`suggest_next_step`)**: Memandu pengguna langkah demi langkah dari Upload ➔ EDA ➔ Treatment ➔ Pipeline ➔ Experiments ➔ Result.
 - **`llm_provider.py`**: Adaptor opsional untuk *enrichment* naratif via model LLM eksternal (misal Gemini API) dengan mekanisme *graceful fallback* ke Rule-Based jika offline atau tanpa API key.
 
@@ -133,11 +144,13 @@ Backend menggunakan **FastAPI** untuk menyediakan REST API yang dikonsumsi oleh 
 5. **`routers/`**:
    - `projects.py`: CRUD proyek (dukungan `task_type`: `classification` / `regression`).
    - `datasets.py`: Upload CSV, ambil profil data, chart EDA, & visualisasi scaling preview before vs after.
-   - `recommendations.py`: Ambil rekomendasi & simpan keputusan user.
+   - `recommendations.py`: Ambil rekomendasi per-kolom, generate kandidat strategi holistik (`GET /treatment-candidates`), evaluasi benchmark 3-Fold CV empiris (`POST /treatment-candidates/evaluate`), simpan keputusan user, dan terapkan seluruh strategi sekaligus secara atomik (`POST /treatment-candidates/apply`).
    - `pipelines.py`: Buat konfigurasi pipeline & jalankan validasi dry-run.
    - `experiments.py`: Eksekusi training eksperimen klasifikasi & regresi, hyperparameter tuning (`POST /experiments/tune`), penanganan flag `is_tuned`, registrasi resmi model ke MLflow Model Registry via `mlflow.sklearn.log_model`, endpoint residual plot, ekspor kode `.py`, dan ekspor laporan `.html`.
    - `assistant.py`: Endpoint penjelasan AI Assistant & panduan alur kerja yang meneruskan `task_type` (klasifikasi/regresi) untuk memastikan ketepatan ringkasan benchmark.
    - `serving.py`: Endpoint produksi untuk inferensi live model kandidat (`GET /models/candidate/schema`, `POST /predict`, dan `POST /predict/batch-csv`).
+6. **API Contract Testing (`tests/test_api_contracts.py`)**:
+   - Seluruh router diverifikasi secara ketat melalui 21 test case otomatis yang menguji kepatuhan status HTTP (`200`, `201`, `204`, `400`, `404`, `422`), integritas schema Pydantic, dan penanganan kesalahan input kosong menggunakan FastAPI `TestClient` dengan in-memory SQLite terisolasi.
 
 ---
 
@@ -160,9 +173,11 @@ Frontend dibangun menggunakan **React 18 + TypeScript + Vite + Tailwind CSS v4**
 1. **`pages/DashboardPage.tsx`**: Halaman utama untuk membuat proyek (Klasifikasi / Regresi) atau memilih proyek.
 2. **`pages/UploadPage.tsx`**: Halaman pengunggahan file CSV dataset dan pemilih kolom target (*label*) dengan kartu dropzone dan konfigurasi seimbang.
 3. **`pages/EDAPage.tsx`**: Halaman 5-tab visualisasi eksplorasi data (Overview, Missing, Distributions, Correlations, Target).
-4. **`pages/TreatmentPage.tsx`**: Halaman kartu keputusan preprocessing & preview visualizer histogram Before vs After Scaling. Menyediakan tombol *Ask AI* dengan parsing bukti statistik fleksibel (`=` dan `:`) agar modal penjelasan menyajikan angka nyata.
+4. **`pages/TreatmentPage.tsx`**: Halaman pra-pemrosesan data dengan arsitektur hierarkis dua tingkat:
+   - **Tingkat Macro (Atas)**: Kartu komparasi kandidat strategi (`Recommended`, `Baseline`, `Alternative`), tombol evaluasi benchmark 3-Fold CV empiris berkecepatan tinggi, badge skor metrik primer & sekunder, indikator Treatment Lift ($\Delta$), dan tombol *Terapkan Strategi Ini* (1-Click Batch Apply).
+   - **Tingkat Micro (Bawah)**: Kartu keputusan per-kolom granular yang otomatis terisi oleh strategi yang dipilih, filter kategori, preview visualizer histogram Before vs After Scaling, badge bahaya merah untuk kebocoran data, dan tombol *Ask AI* yang menyajikan bukti statistik nyata. Pengguna tetap bebas melakukan *override* manual pada tiap kolom.
 5. **`pages/PipelinePage.tsx`**: Visualisasi DAG pipeline scikit-learn dan tombol uji validasi pipeline dengan icon komponen taktil.
-6. **`pages/ExperimentsPage.tsx`**: Halaman seleksi algoritma model (Klasifikasi / Regresi), toggle Auto Feature Engineering, pengaturan CV Folds, tombol `Tune` kontekstual pada setiap baris hasil eksperimen selesai dan kartu *Best Model*, modal Hyperparameter Tuning dengan pencarian Randomized Search, tombol *Run & Register Tuned Model*, kartu ringkasan **AI Benchmark Summary**, serta mekanisme *live polling* reaktif setiap 2 detik yang otomatis meng-update tabel dan ringkasan AI seketika eksperimen selesai.
+6. **`pages/ExperimentsPage.tsx`**: Halaman seleksi algoritma model (Klasifikasi / Regresi), toggle Auto Feature Engineering, pengaturan CV Folds, tombol `Tune` kontekstual, modal Hyperparameter Tuning, kartu *Best Performing Model* dengan format metrik $R^2$ desimal konsisten (`0.8273 ± 0.3092`), serta kartu **AI Benchmark Summary** neumorphic berbobot kontras tinggi yang dilengkapi parser markdown (`renderMarkdownBold`) dan dua kolom terstruktur (**Bukti Performa Model** dan **Status & Rekomendasi Langkah**).
 7. **`pages/ResultPage.tsx`**: Halaman hasil akhir yang menampilkan statistik performa kandidat terpilih, Confusion Matrix (Klasifikasi) atau Scatter Plot Actual vs Predicted & Residuals (Regresi), panel interaktif **Live Model Serving & Inference Playground** (form prediksi dinamis input mentah, batch upload CSV data baru, dan generator kode API cURL & Python), serta tombol download artefak (`.pkl`, `.json`, `.py`, `.html`).
 8. **`components/AIAssistantWidget.tsx`**: Drawer pembimbing AI melayang di sudut kanan bawah dengan styling neumorphic yang mengenali seluruh alur halaman termasuk tahapan eksplorasi data (`/eda`).
 9. **`components/ErrorBoundary.tsx`**: Komponen penangkap galat runtime React untuk mencegah layar putih kosong saat terjadi error tak terduga.
@@ -174,13 +189,14 @@ Frontend dibangun menggunakan **React 18 + TypeScript + Vite + Tailwind CSS v4**
 ```mermaid
 flowchart TD
     A[1. Upload CSV & Target Column] --> B[2. Profiling & EDA Generation]
-    B --> C[3. Recommendation Engine Deterministic]
-    C --> D[4. Human Decision: Accept / Override]
-    D --> E[5. Build & Validate scikit-learn Pipeline]
-    E --> F[6. Run Stratified K-Fold CV Experiments]
-    F --> G[7. Auto-Log Params, Metrics & Model to MLflow]
-    G --> H[8. User Selects Candidate Model]
-    H --> I[9. Export Runnable Python Script / HTML Report / Pickle]
+    B --> C[3. Candidate Strategy Generation: Recommended vs Baseline vs Alt]
+    C --> D[4. Fast Empirical CV Benchmark: 3-Fold Reference Estimator]
+    D --> E[5. 1-Click Batch Apply or Granular Manual Overrides]
+    E --> F[6. Build & Validate scikit-learn Pipeline]
+    F --> G[7. Run Stratified K-Fold CV Experiments]
+    G --> H[8. Auto-Log Params, Metrics & Model to MLflow]
+    H --> I[9. User Selects Candidate Model]
+    I --> J[10. Serving Inference / Export Python Code & HTML Report]
 ```
 
 ---
@@ -206,7 +222,7 @@ flowchart TD
 
 ### Tempat Mengedit Kode Jika Ingin Menambah Fitur:
 - **Menambah Model ML Baru**: Edit file [packages/ml_engine/models/registry.py](file:///d:/ml-autonomus/packages/ml_engine/models/registry.py).
-- **Menambah Aturan Preprocessing Baru**: Edit file [packages/ml_engine/recommendations/engine.py](file:///d:/ml-autonomus/packages/ml_engine/recommendations/engine.py).
+- **Menambah Aturan Preprocessing Baru**: Edit file [packages/ml_engine/recommendations/engine.py](file:///d:/ml-autonomus/packages/ml_engine/recommendations/engine.py) dan generator kandidat strategi di [packages/ml_engine/recommendations/candidate_evaluator.py](file:///d:/ml-autonomus/packages/ml_engine/recommendations/candidate_evaluator.py).
 - **Menambah Fitur Inferensi & Serving**: Edit file [packages/ml_engine/serving/inference.py](file:///d:/ml-autonomus/packages/ml_engine/serving/inference.py) dan [apps/api/routers/serving.py](file:///d:/ml-autonomus/apps/api/routers/serving.py).
 - **Menambah Uji Statistik Drift Monitoring**: Edit file [packages/ml_engine/monitoring/drift_detector.py](file:///d:/ml-autonomus/packages/ml_engine/monitoring/drift_detector.py) dan [apps/api/routers/monitoring.py](file:///d:/ml-autonomus/apps/api/routers/monitoring.py).
 - **Menambah Deteksi Leakage Baru**: Edit file [packages/ml_engine/detection/leakage_detector.py](file:///d:/ml-autonomus/packages/ml_engine/detection/leakage_detector.py) — sesuaikan threshold atau tambah mode deteksi baru. Update `__init__.py` di folder `detection/` jika menambah export publik.
