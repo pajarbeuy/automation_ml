@@ -1,10 +1,15 @@
 from db_models.orm import (  # noqa: F401
+    ApiKey,
     Artifact,
     Dataset,
     Experiment,
+    Job,
+    MetaRunRecord,
     Metric,
     PipelineConfig,
     PredictionLog,
     Project,
+    Tenant,
+    User,
     WorkflowDecision,
 )
