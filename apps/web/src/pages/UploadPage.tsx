@@ -1,8 +1,23 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Upload, FileText, ChevronRight, AlertCircle, AlertTriangle, TrendingUp, Target } from 'lucide-react';
+import { Upload, FileText, ChevronRight, AlertCircle, AlertTriangle, TrendingUp, Target, MessageSquare, Clock, CheckCircle2, X } from 'lucide-react';
 import { uploadDataset, listDatasets, getProject } from '../api/client';
 import type { Dataset, Project } from '../types';
+
+function formatBytes(bytes: number): string {
+  if (bytes <= 0 || !isFinite(bytes)) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+}
+
+function formatETA(seconds: number): string {
+  if (seconds <= 0 || !isFinite(seconds)) return 'Menghitung...';
+  if (seconds < 60) return `~${Math.ceil(seconds)} detik`;
+  const mins = Math.floor(seconds / 60);
+  const remainingSecs = Math.ceil(seconds % 60);
+  return remainingSecs > 0 ? `~${mins} m ${remainingSecs} d` : `~${mins} menit`;
+}
 
 export function UploadPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -14,10 +29,18 @@ export function UploadPage() {
   const [targetColumn, setTargetColumn] = useState('');
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadPercent, setUploadPercent] = useState(0);
+  const [uploadStage, setUploadStage] = useState<'idle' | 'uploading' | 'parsing' | 'profiling' | 'eda' | 'completed'>('idle');
+  const [loadedBytes, setLoadedBytes] = useState(0);
+  const [totalBytes, setTotalBytes] = useState(0);
+  const [uploadSpeed, setUploadSpeed] = useState(0);
+  const [etaSeconds, setEtaSeconds] = useState(0);
+  const [isReadingLocal, setIsReadingLocal] = useState(false);
+  const [localReadPercent, setLocalReadPercent] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [existing, setExisting] = useState<Dataset[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
-
+  const abortControllerRef = useRef<AbortController | null>(null);
   // Check if preview values for the selected target look like continuous numbers
   const targetColIdx = headers.indexOf(targetColumn);
   const targetPreviewValues = preview.map(row => row[targetColIdx]).filter(Boolean);
@@ -53,13 +76,29 @@ export function UploadPage() {
 
   const handleFile = (f: File) => {
     if (!f.name.endsWith('.csv')) {
-      setError('Only CSV files are supported.');
+      setError('Hanya berkas format CSV yang didukung.');
       return;
     }
     setFile(f);
     setError(null);
+    setIsReadingLocal(true);
+    setLocalReadPercent(0);
+
     const reader = new FileReader();
-    reader.onload = e => parseCSVPreview(e.target?.result as string);
+    reader.onprogress = (e) => {
+      if (e.lengthComputable) {
+        setLocalReadPercent(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+    reader.onload = e => {
+      parseCSVPreview(e.target?.result as string);
+      setIsReadingLocal(false);
+      setLocalReadPercent(100);
+    };
+    reader.onerror = () => {
+      setError('Gagal membaca berkas CSV.');
+      setIsReadingLocal(false);
+    };
     reader.readAsText(f);
   };
 
@@ -74,25 +113,115 @@ export function UploadPage() {
     if (!file || !targetColumn || !projectId) return;
     setUploading(true);
     setError(null);
+    setUploadPercent(0);
+    setUploadStage('uploading');
+    setLoadedBytes(0);
+    setTotalBytes(file.size);
+    setUploadSpeed(0);
+    setEtaSeconds(0);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    let serverTimer: number | undefined;
+
     try {
-      await uploadDataset(projectId, file, targetColumn);
-      navigate(`/projects/${projectId}/eda`);
+      const uploadPromise = uploadDataset(
+        projectId,
+        file,
+        targetColumn,
+        progress => {
+          setLoadedBytes(progress.loaded);
+          setTotalBytes(progress.total);
+          setUploadSpeed(progress.speedBytesPerSec);
+
+          if (progress.percent < 100) {
+            // Tahap 1: Transfer data (0 - 50%)
+            setUploadPercent(Math.round(progress.percent * 0.5));
+            setEtaSeconds(progress.etaSeconds);
+            setUploadStage('uploading');
+          } else {
+            // Tahap 2: Server-side processing & profiling (50% - 96%)
+            setUploadPercent(52);
+            setUploadStage('parsing');
+            // Estimasi profiling server: ~10MB sekitar 8-15 detik
+            const estimatedServerSeconds = Math.max(6, Math.min(30, Math.ceil((file.size / (1024 * 1024)) * 0.9)));
+            setEtaSeconds(estimatedServerSeconds);
+
+            if (!serverTimer) {
+              const serverStart = Date.now();
+              serverTimer = setInterval(() => {
+                const elapsedSec = (Date.now() - serverStart) / 1000;
+                const remaining = Math.max(1, estimatedServerSeconds - elapsedSec);
+                setEtaSeconds(remaining);
+
+                setUploadPercent(prev => {
+                  if (prev < 68) {
+                    setUploadStage('parsing');
+                    return prev + 2;
+                  } else if (prev < 84) {
+                    setUploadStage('profiling');
+                    return prev + 1.2;
+                  } else if (prev < 96) {
+                    setUploadStage('eda');
+                    return prev + 0.6;
+                  }
+                  return prev;
+                });
+              }, 350);
+            }
+          }
+        },
+        controller.signal
+      );
+
+      await uploadPromise;
+
+      clearInterval(serverTimer);
+      setUploadPercent(100);
+      setUploadStage('completed');
+      setEtaSeconds(0);
+
+      setTimeout(() => {
+        navigate(`/projects/${projectId}/eda`);
+      }, 700);
     } catch (e: any) {
-      setError(e?.response?.data?.detail ?? 'Upload failed. Please try again.');
+      clearInterval(serverTimer);
+      if (controller.signal.aborted) {
+        setError('Proses upload dibatalkan oleh pengguna.');
+      } else {
+        setError(e?.response?.data?.detail ?? 'Upload gagal. Silakan coba lagi.');
+      }
     } finally {
+      clearInterval(serverTimer);
+      if (!controller.signal.aborted) {
+        setTimeout(() => setUploading(false), 700);
+      } else {
+        setUploading(false);
+      }
+    }
+  };
+
+  const handleCancelUpload = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
       setUploading(false);
+      setUploadStage('idle');
+      setUploadPercent(0);
+      setError('Upload dibatalkan oleh pengguna.');
     }
   };
 
   const taskType = project?.task_type || 'classification';
   const isRegression = taskType === 'regression';
+  const isSentiment = taskType === 'sentiment_analysis' || taskType === 'nlp';
 
   return (
     <div className="animate-fade-in">
       <div className="page-header">
         <div>
           <h1 className="page-title">
-            Dataset Upload ({isRegression ? 'Regression Project' : 'Classification Project'})
+            Dataset Upload ({isRegression ? 'Regression Project' : (isSentiment ? 'Sentiment Analysis (NLP) Project' : 'Classification Project')})
           </h1>
           <p className="page-subtitle">Upload a CSV file and select the target column to predict</p>
         </div>
@@ -158,6 +287,12 @@ export function UploadPage() {
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                   {(file.size / 1024).toFixed(1)} KB — click to replace
                 </div>
+                {isReadingLocal && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+                    <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+                    Membaca pratinjau ({localReadPercent}%)...
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -184,8 +319,8 @@ export function UploadPage() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
               <h3 style={{ margin: 0 }}>Configuration</h3>
-              <span className={`badge ${isRegression ? 'badge-success' : 'badge-primary'}`} style={{ textTransform: 'capitalize' }}>
-                {isRegression ? <TrendingUp size={12} /> : <Target size={12} />} {taskType}
+              <span className={`badge ${isRegression ? 'badge-success' : (isSentiment ? 'badge-info' : 'badge-primary')}`} style={{ textTransform: 'capitalize' }}>
+                {isRegression ? <TrendingUp size={12} /> : (isSentiment ? <MessageSquare size={12} /> : <Target size={12} />)} {isSentiment ? 'Sentiment (NLP)' : taskType}
               </span>
             </div>
 
@@ -218,6 +353,16 @@ export function UploadPage() {
                     </div>
                   )}
 
+
+                  {isSentiment && (
+                    <div className="alert alert-info" style={{ marginTop: '0.75rem', fontSize: '0.78rem' }}>
+                      <MessageSquare size={14} />
+                      <div>
+                        <strong>NLP Sentiment Analysis Project.</strong><br />
+                        Pilih kolom target label sentimen (misal: <code>sentiment</code> atau <code>label</code>). Kolom teks ulasan akan otomatis dideteksi dan diproses oleh pipeline tokenisasi TF-IDF.
+                      </div>
+                    </div>
+                  )}
                   {!isRegression && (looksLikeContinuous || highCardinalityNumeric) && (
                     <div className="alert alert-warning" style={{ marginTop: '0.75rem', fontSize: '0.78rem' }}>
                       <AlertTriangle size={14} />
@@ -253,26 +398,121 @@ export function UploadPage() {
             )}
           </div>
 
-          {headers.length > 0 && (
-            <button
-              id="upload-btn"
-              className="btn btn-primary"
-              style={{ width: '100%', marginTop: '1rem' }}
-              onClick={handleUpload}
-              disabled={uploading || !targetColumn}
+          {uploading ? (
+            <div
+              className="card-elevated animate-fade-in"
+              style={{
+                marginTop: '1rem',
+                padding: '1.25rem',
+                borderRadius: '12px',
+                border: '1.5px solid var(--accent)',
+                background: 'rgba(67, 56, 202, 0.04)',
+              }}
             >
-              {uploading ? (
-                <>
-                  <span className="spinner" />
-                  Profiling dataset…
-                </>
-              ) : (
-                <>
-                  <Upload size={16} />
-                  Upload & Profile Dataset
-                </>
+              {/* Stage header & percentage */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {uploadStage === 'completed' ? (
+                    <CheckCircle2 size={18} color="var(--success)" />
+                  ) : (
+                    <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+                  )}
+                  <span style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--text-primary)' }}>
+                    {uploadStage === 'uploading' && 'Mengunggah Berkas CSV...'}
+                    {uploadStage === 'parsing' && 'Membaca Baris & Validasi Tipe Data...'}
+                    {uploadStage === 'profiling' && 'Menghitung Statistik, Outlier & Skewness...'}
+                    {uploadStage === 'eda' && 'Menyusun Matriks Korelasi & Grafik EDA...'}
+                    {uploadStage === 'completed' && 'Selesai! Mengalihkan ke EDA...'}
+                  </span>
+                </div>
+                <span style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--accent)' }}>
+                  {uploadPercent}%
+                </span>
+              </div>
+
+              {/* Progress bar track */}
+              <div
+                style={{
+                  width: '100%',
+                  height: '10px',
+                  background: 'var(--bg-inset)',
+                  borderRadius: '6px',
+                  overflow: 'hidden',
+                  boxShadow: 'var(--neu-inset-sm)',
+                  marginBottom: '0.75rem',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${uploadPercent}%`,
+                    height: '100%',
+                    background: uploadStage === 'completed' ? 'var(--success)' : 'var(--accent)',
+                    borderRadius: '6px',
+                    transition: 'width 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+                  }}
+                />
+              </div>
+
+              {/* Detailed metrics & ETA */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: '0.75rem',
+                  color: 'var(--text-secondary)',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem',
+                  marginBottom: '0.75rem',
+                }}
+              >
+                <div>
+                  <span>{formatBytes(loadedBytes)} / {formatBytes(totalBytes)}</span>
+                  {uploadSpeed > 0 && uploadStage === 'uploading' && (
+                    <span style={{ color: 'var(--text-muted)', marginLeft: '0.35rem' }}>
+                      ({formatBytes(uploadSpeed)}/s)
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600, color: 'var(--accent)' }}>
+                  <Clock size={13} />
+                  <span>Sisa Waktu (ETA): {formatETA(etaSeconds)}</span>
+                </div>
+              </div>
+
+              {/* Cancel Button */}
+              {uploadStage !== 'completed' && (
+                <button
+                  type="button"
+                  onClick={handleCancelUpload}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '100%',
+                    fontSize: '0.76rem',
+                    justifyContent: 'center',
+                    gap: '0.35rem',
+                    color: 'var(--danger)',
+                    padding: '0.35rem 0.5rem',
+                  }}
+                >
+                  <X size={14} /> Batalkan Proses
+                </button>
               )}
-            </button>
+            </div>
+          ) : (
+            headers.length > 0 && (
+              <button
+                id="upload-btn"
+                className="btn btn-primary"
+                style={{ width: '100%', marginTop: '1rem' }}
+                onClick={handleUpload}
+                disabled={uploading || !targetColumn}
+              >
+                <Upload size={16} />
+                Upload & Profile Dataset
+              </button>
+            )
           )}
         </div>
       </div>

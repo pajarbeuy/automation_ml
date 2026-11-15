@@ -8,7 +8,7 @@ import { listDatasets, getProfile, getEDA, getProject } from '../api/client';
 import type { DatasetProfile, DatasetEDA, Project } from '../types';
 import { AlertTriangle, CheckCircle, ChevronRight, Database, Info } from 'lucide-react';
 
-type Tab = 'overview' | 'missing' | 'distributions' | 'correlations' | 'target';
+type Tab = 'overview' | 'missing' | 'distributions' | 'correlations' | 'target' | 'text';
 
 const COLORS = ['#6366f1', '#a855f7', '#ec4899', '#f59e0b', '#10b981', '#3b82f6'];
 
@@ -109,6 +109,11 @@ export function EDAPage() {
             {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
+        {pj.text_profile && (
+          <button className={`tab ${tab === 'text' ? 'active' : ''}`} onClick={() => setTab('text')}>
+            Text &amp; NLP
+          </button>
+        )}
       </div>
 
       {/* Overview Tab */}
@@ -547,6 +552,91 @@ export function EDAPage() {
           </div>
         );
       })()}
+      {/* Text / NLP Tab */}
+      {tab === 'text' && pj.text_profile && (
+        <div>
+          <div className="grid-4" style={{ marginBottom: '1.5rem' }}>
+            <div className="metric-card">
+              <div className="metric-label">Vocabulary Size</div>
+              <div className="metric-value" style={{ color: 'var(--accent)' }}>
+                {pj.text_profile.vocab_size?.toLocaleString()}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Unique lowercase tokens</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">Lexical Richness (TTR)</div>
+              <div className="metric-value">
+                {(pj.text_profile.lexical_richness * 100).toFixed(1)}%
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Type-Token Ratio</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">Avg Document Length</div>
+              <div className="metric-value">
+                {pj.text_profile.token_stats?.mean} tokens
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Max: {pj.text_profile.token_stats?.max} tokens</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">Stopword Ratio</div>
+              <div className="metric-value">
+                {(pj.text_profile.stopword_ratio * 100).toFixed(1)}%
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Common stopwords proportion</div>
+            </div>
+          </div>
+
+          <div className="grid-2" style={{ gap: '1.5rem' }}>
+            {/* Top Unigrams */}
+            <div className="card">
+              <h3 style={{ marginBottom: '1rem' }}>Top Words (Unigrams)</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Word</th>
+                      <th>Occurrences</th>
+                      <th>Relative Freq</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pj.text_profile.top_unigrams?.map((u: any, i: number) => (
+                      <tr key={i}>
+                        <td style={{ fontWeight: 600 }}>{u.token}</td>
+                        <td>{u.count.toLocaleString()}</td>
+                        <td>{(u.frequency * 100).toFixed(2)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Top Bigrams */}
+            <div className="card">
+              <h3 style={{ marginBottom: '1rem' }}>Top Phrases (Bigrams)</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Phrase</th>
+                      <th>Occurrences</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pj.text_profile.top_bigrams?.map((b: any, i: number) => (
+                      <tr key={i}>
+                        <td style={{ fontWeight: 600 }}>{b.bigram}</td>
+                        <td>{b.count.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

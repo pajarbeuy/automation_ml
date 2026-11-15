@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
   Upload, BarChart2, Sliders,
   GitBranch, FlaskConical, ChevronLeft, Brain, Trophy, Menu, X, Activity,
+  LogOut,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface NavItem {
   label: string;
@@ -16,7 +18,7 @@ export function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-
+  const { user, logout } = useAuth();
   const navItems: NavItem[] = [
     { label: 'Dataset Upload', path: 'upload', icon: <Upload size={16} /> },
     { label: 'EDA Workspace', path: 'eda', icon: <BarChart2 size={16} /> },
@@ -104,17 +106,42 @@ export function Sidebar() {
           ))}
         </nav>
 
-        {/* Phase indicator */}
+        {/* User Profile & Logout */}
         <div style={{
-          padding: '1rem',
+          padding: '0.875rem',
           borderTop: '1px solid var(--border)',
-          fontSize: '0.75rem',
-          color: 'var(--text-muted)',
+          marginTop: 'auto',
         }}>
-          <div style={{ marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-            MVP v0.1.0 — Classification
+          {user && (
+            <div className="flex items-center justify-between gap-2 mb-2 p-2 rounded-xl bg-[#dde5ef]/60 border border-[#cbd5e1]/50">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-700 text-white font-bold text-xs shadow-sm">
+                  {user.username.charAt(0).toUpperCase()}
+                </div>
+                <div className="overflow-hidden">
+                  <div className="text-xs font-bold text-slate-800 truncate leading-tight">
+                    {user.username}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-medium capitalize truncate">
+                    {user.role.replace('_', ' ')}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  logout();
+                  navigate('/login');
+                }}
+                title="Keluar (Logout)"
+                className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
+          )}
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            v1.1.0 • Autonomous & Human-in-the-Loop
           </div>
-          <div>Follow the workflow steps in order for best results.</div>
         </div>
       </div>
     </>

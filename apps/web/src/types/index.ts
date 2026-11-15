@@ -43,6 +43,34 @@ export interface FeatureProfile {
   high_cardinality: boolean;
 }
 
+export interface TextProfile {
+  text_column: string;
+  doc_count: number;
+  empty_docs_count: number;
+  total_tokens: number;
+  vocab_size: number;
+  lexical_richness: number;
+  stopword_ratio: number;
+  uppercase_ratio: number;
+  punctuation_ratio: number;
+  char_stats?: {
+    mean: number;
+    median: number;
+    min: number;
+    max: number;
+    std: number;
+  };
+  token_stats?: {
+    mean: number;
+    median: number;
+    min: number;
+    max: number;
+    std: number;
+  };
+  top_unigrams?: Array<{ token: string; count: number; frequency: number }>;
+  top_bigrams?: Array<{ bigram: string; count: number }>;
+}
+
 export interface DatasetProfile {
   id: string;
   filename: string;
@@ -56,6 +84,7 @@ export interface DatasetProfile {
     features: FeatureProfile[];
     class_distribution: Record<string, number>;
     dataset_hash: string;
+    text_profile?: TextProfile | null;
   } | null;
 }
 
@@ -162,6 +191,7 @@ export interface Experiment {
   project_id: string;
   dataset_id: string;
   model_name: string;
+  experiment_name?: string | null;
   random_seed: number;
   status: string;
   training_time_seconds: number | null;
@@ -176,6 +206,7 @@ export interface Experiment {
 
 export interface ExperimentCreate {
   model_names: string[];
+  experiment_name?: string;
   random_seed?: number;
   cv_folds?: number;
   primary_metric?: string;
@@ -240,6 +271,12 @@ export interface CandidateSchemaResponse {
   features: FeatureSchema[];
 }
 
+export interface WordAttributionItem {
+  word: string;
+  weight: number;
+  sentiment: 'positive' | 'negative' | string;
+}
+
 export interface PredictionResult {
   prediction: string | number;
   confidence?: number;
@@ -248,8 +285,8 @@ export interface PredictionResult {
   margin_of_error?: number;
   interval_lower?: number;
   interval_upper?: number;
+  contributing_words?: WordAttributionItem[];
 }
-
 export interface PredictResponse {
   result?: PredictionResult;
   results?: PredictionResult[];
@@ -301,5 +338,116 @@ export interface SimulateTrafficResponse {
   simulated_samples: number;
   drift_type: 'normal' | 'drifted';
   message: string;
+}
+
+// ─── Treatment Candidates & Validation Types ───────────────────
+export interface TreatmentCandidate {
+  candidate_id: string;
+  name: string;
+  strategy_type: string;
+  description: string;
+  decisions: Array<{
+    column?: string | null;
+    action: string;
+    category?: string;
+    parameters?: Record<string, any>;
+    status?: string;
+  }>;
+  summary_tags: string[];
+}
+
+export interface TreatmentCandidateEvaluation {
+  candidate_id: string;
+  name: string;
+  strategy_type: string;
+  primary_metric_name: string;
+  primary_score: number;
+  primary_std: number;
+  secondary_metric_name: string;
+  secondary_score: number;
+  rank: number;
+  summary_tags: string[];
+  training_time_seconds: number;
+}
+
+export interface TreatmentValidationReport {
+  task_type: string;
+  benchmark_model: string;
+  primary_metric: string;
+  validation_status: 'SUPERIOR' | 'INCONCLUSIVE' | 'SUBOPTIMAL' | 'INVALID_EVALUATION' | string;
+  headline: string;
+  explanation: string;
+  lift: number | null;
+  lift_percentage: number | null;
+  mean_difference?: number | null;
+  relative_difference?: number | null;
+  best_candidate_id: string;
+  confidence_level?: number;
+  ci_lower?: number | null;
+  ci_upper?: number | null;
+  baseline_fold_scores?: number[];
+  recommended_fold_scores?: number[];
+  fold_differences?: number[];
+  sign_agreement?: string;
+  evaluation_metadata?: {
+    task_type?: string;
+    ci_method?: string;
+    degrees_of_freedom?: number | null;
+    n_valid_folds?: number;
+    estimator?: string;
+    estimator_parameters?: Record<string, any>;
+    cv_strategy?: string;
+    n_splits?: number;
+    shuffle?: boolean;
+    random_state?: number;
+    scoring_metric?: string;
+    confidence_level?: number;
+  };
+  candidates: TreatmentCandidateEvaluation[];
+}
+
+export interface ApplyCandidateResponse {
+  status: string;
+  candidate_id: string;
+  applied_count: number;
+  decisions: WorkflowDecision[];
+}
+
+
+export interface User {
+  id: string;
+  email: string;
+  username: string;
+  role: 'admin' | 'data_scientist' | 'viewer' | string;
+  tenant_id?: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+
+export interface LoginPayload {
+  email: string;
+  password: string;
+}
+
+export interface RegisterPayload {
+  email: string;
+  username: string;
+  password: string;
+  role?: string;
+  tenant_id?: string | null;
 }
 

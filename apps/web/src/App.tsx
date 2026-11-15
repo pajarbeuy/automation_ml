@@ -8,9 +8,12 @@ import { PipelinePage } from './pages/PipelinePage';
 import { ExperimentsPage } from './pages/ExperimentsPage';
 import { ResultPage } from './pages/ResultPage';
 import { DriftMonitoringPage } from './pages/DriftMonitoringPage';
+import { LoginPage } from './pages/LoginPage';
 import { Sidebar } from './components/Sidebar';
 import { AIAssistantWidget } from './components/AIAssistantWidget';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { AuthProvider } from './context/AuthContext';
 import './index.css';
 
 function ProjectLayout() {
@@ -41,14 +44,32 @@ function ProjectLayout() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <div className="layout-main">
-          <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/projects/:projectId/*" element={<ProjectLayout />} />
-          </Routes>
-        </div>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <div className="layout-main">
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <DashboardPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/:projectId/*"
+                element={
+                  <ProtectedRoute>
+                    <ProjectLayout />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+        </BrowserRouter>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

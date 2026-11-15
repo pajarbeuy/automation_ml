@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Brain, FolderOpen, Trash2, ChevronRight, Zap, Clock, Target, TrendingUp, CheckCircle2 } from 'lucide-react';
+import { Plus, Brain, FolderOpen, Trash2, ChevronRight, Zap, Clock, Target, TrendingUp, CheckCircle2, LogOut, MessageSquare } from 'lucide-react';
 import { listProjects, createProject, deleteProject } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import type { Project } from '../types';
 
 function statusColor(status: string): string {
@@ -16,6 +17,7 @@ function statusColor(status: string): string {
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -76,13 +78,34 @@ export function DashboardPage() {
             </div>
           </div>
         </div>
-        <button
-          id="new-project-btn"
-          className="btn btn-primary"
-          onClick={() => setShowModal(true)}
-        >
-          <Plus size={16} /> New Project
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {user && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#dde5ef] border border-[#cbd5e1] text-xs">
+              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-700 text-white font-bold text-[10px]">
+                {user.username.charAt(0).toUpperCase()}
+              </div>
+              <span className="font-semibold text-slate-800">{user.username}</span>
+              <span className="text-[10px] text-slate-500 capitalize">({user.role.replace('_', ' ')})</span>
+              <button
+                onClick={() => {
+                  logout();
+                  navigate('/login');
+                }}
+                title="Keluar (Logout)"
+                className="ml-1 p-1 text-slate-400 hover:text-red-600 rounded transition-colors"
+              >
+                <LogOut size={14} />
+              </button>
+            </div>
+          )}
+          <button
+            id="new-project-btn"
+            className="btn btn-primary"
+            onClick={() => setShowModal(true)}
+          >
+            <Plus size={16} /> New Project
+          </button>
+        </div>
       </div>
 
       {/* Hero banner */}
@@ -237,7 +260,7 @@ export function DashboardPage() {
 
             <div className="form-group" style={{ marginBottom: '1.25rem' }}>
               <label className="label">Task Type (Jenis Tugas ML) *</label>
-              <div className="grid-2" style={{ gap: '0.75rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem' }}>
                 {/* Classification Radio Card */}
                 <div
                   onClick={() => setForm(f => ({ ...f, taskType: 'classification' }))}
@@ -323,6 +346,50 @@ export function DashboardPage() {
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
                     Prediksi angka kontinu (misal: Harga Rumah, Usia, Gaji)
+                  </div>
+                </div>
+
+                {/* Sentiment Analysis Radio Card */}
+                <div
+                  onClick={() => setForm(f => ({ ...f, taskType: 'sentiment_analysis' }))}
+                  style={{
+                    padding: '0.85rem 1rem',
+                    borderRadius: '10px',
+                    border: form.taskType === 'sentiment_analysis'
+                      ? '2px solid var(--accent)'
+                      : '1.5px solid var(--border)',
+                    background: form.taskType === 'sentiment_analysis'
+                      ? 'rgba(67, 56, 202, 0.08)'
+                      : 'var(--bg-card)',
+                    boxShadow: form.taskType === 'sentiment_analysis'
+                      ? '0 0 0 1px var(--accent), 0 2px 8px rgba(67, 56, 202, 0.15)'
+                      : 'var(--neu-raised-sm)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <MessageSquare size={16} color={form.taskType === 'sentiment_analysis' ? 'var(--accent)' : 'var(--text-muted)'} />
+                      <span style={{
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        color: form.taskType === 'sentiment_analysis' ? 'var(--accent)' : 'var(--text-primary)',
+                      }}>
+                        Sentiment
+                      </span>
+                    </div>
+                    {form.taskType === 'sentiment_analysis' ? (
+                      <CheckCircle2 size={16} color="var(--accent)" />
+                    ) : (
+                      <div style={{ width: 14, height: 14, borderRadius: '50%', border: '1.5px solid #94a3b8' }} />
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                    Klasifikasi sentimen teks ulasan (Positif / Negatif / Netral)
                   </div>
                 </div>
               </div>

@@ -776,6 +776,39 @@ export function ResultPage() {
                     </div>
                   </div>
                 )}
+
+                {/* Sentiment Analysis Word Attribution Highlights */}
+                {predictionResult.contributing_words && predictionResult.contributing_words.length > 0 && (
+                  <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '0.85rem' }}>
+                    <div style={{ fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                      Word Attribution &middot; Kata Pendorong Sentimen:
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                      {predictionResult.contributing_words.map((item, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            padding: '3px 9px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            background: item.sentiment === 'positive' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                            color: item.sentiment === 'positive' ? '#10b981' : '#f87171',
+                            border: item.sentiment === 'positive' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                          }}
+                        >
+                          <span>{item.word}</span>
+                          <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>
+                            ({item.weight > 0 ? '+' : ''}{item.weight.toFixed(2)})
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

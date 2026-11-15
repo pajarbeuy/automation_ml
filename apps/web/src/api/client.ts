@@ -14,11 +14,27 @@ import type {
   PredictResponse,
   DriftReportResponse,
   SimulateTrafficResponse,
+  TreatmentCandidate,
+  TreatmentValidationReport,
+  ApplyCandidateResponse,
+  User,
+  AuthResponse,
+  LoginPayload,
+  RegisterPayload,
 } from '../types';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '',
   headers: { 'Content-Type': 'application/json' },
+});
+
+// Attach JWT Bearer Token if present in localStorage
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('automl_token');
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 // Helper function to extract human-readable error messages from Axios / FastAPI
@@ -51,6 +67,18 @@ api.interceptors.response.use(
   }
 );
 
+// ─── Authentication & Multi-Tenancy ──────────────────────────
+export const authApi = {
+  login: (payload: LoginPayload) =>
+    api.post<AuthResponse>('/api/auth/login', payload).then(r => r.data),
+  register: (payload: RegisterPayload) =>
+    api.post<User>('/api/auth/register', payload).then(r => r.data),
+  getMe: () =>
+    api.get<User>('/api/auth/me').then(r => r.data),
+  createApiKey: (name: string, expiresInDays?: number) =>
+    api.post('/api/auth/api-keys', { name, expires_in_days: expiresInDays }).then(r => r.data),
+};
+
 // ─── Projects ────────────────────────────────────────────────
 export const createProject = (data: { name: string; description?: string; task_type?: string }) =>
   api.post<Project>('/api/projects', data).then(r => r.data);
@@ -68,12 +96,62 @@ export const deleteProject = (id: string) =>
   api.delete(`/api/projects/${id}`);
 
 // ─── Datasets ────────────────────────────────────────────────
-export const uploadDataset = (projectId: string, file: File, targetColumn: string) => {
+export interface UploadProgressEvent {
+  loaded: number;
+  total: number;
+  percent: number;
+  speedBytesPerSec: number;
+  etaSeconds: number;
+}
+
+export const uploadDataset = (
+  projectId: string,
+  file: File,
+  targetColumn: string,
+  onProgress?: (progress: UploadProgressEvent) => void,
+  cancelSignal?: AbortSignal,
+) => {
   const form = new FormData();
   form.append('file', file);
   form.append('target_column', targetColumn);
+
+  const startTime = Date.now();
+  let lastLoaded = 0;
+  let lastTime = startTime;
+
   return api.post<Dataset>(`/api/projects/${projectId}/datasets`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    signal: cancelSignal,
+    onUploadProgress: (progressEvent) => {
+      const now = Date.now();
+      const total = progressEvent.total || file.size || 1;
+      const loaded = progressEvent.loaded || 0;
+      const percent = Math.min(100, Math.round((loaded * 100) / total));
+
+      const timeDelta = (now - lastTime) / 1000;
+      const bytesDelta = loaded - lastLoaded;
+      const speed = timeDelta > 0.1 && bytesDelta > 0
+        ? bytesDelta / timeDelta
+        : (loaded / Math.max((now - startTime) / 1000, 0.05));
+
+      const remainingBytes = Math.max(0, total - loaded);
+      const eta = speed > 0 ? remainingBytes / speed : 0;
+
+      if (onProgress) {
+        onProgress({
+          loaded,
+          total,
+          percent,
+          speedBytesPerSec: speed,
+          etaSeconds: Math.max(0, eta),
+        });
+      }
+
+      if (timeDelta > 0.1) {
+        lastLoaded = loaded;
+        lastTime = now;
+      }
+    },
   }).then(r => r.data);
 };
 
@@ -104,6 +182,16 @@ export const submitDecision = (
 
 export const listDecisions = (projectId: string) =>
   api.get<WorkflowDecision[]>(`/api/projects/${projectId}/decisions`).then(r => r.data);
+
+// ─── Treatment Candidates & Empirical Validation ──────────────
+export const getTreatmentCandidates = (projectId: string) =>
+  api.get<TreatmentCandidate[]>(`/api/projects/${projectId}/treatment-candidates`).then(r => r.data);
+
+export const evaluateTreatmentCandidates = (projectId: string) =>
+  api.post<TreatmentValidationReport>(`/api/projects/${projectId}/treatment-candidates/evaluate`).then(r => r.data);
+
+export const applyTreatmentCandidate = (projectId: string, candidateId: string) =>
+  api.post<ApplyCandidateResponse>(`/api/projects/${projectId}/treatment-candidates/apply`, { candidate_id: candidateId }).then(r => r.data);
 
 // ─── Pipelines ───────────────────────────────────────────────
 export const generatePipeline = (projectId: string) =>

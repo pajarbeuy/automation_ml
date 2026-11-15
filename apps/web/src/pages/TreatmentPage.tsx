@@ -2,12 +2,30 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  CheckCircle2, X, RotateCcw, ChevronRight, Info, Sparkles, Bot, BarChart2, Lightbulb
+  CheckCircle2, X, RotateCcw, ChevronRight, Info, Sparkles, Bot, BarChart2, Lightbulb,
+  ShieldCheck, AlertCircle, Award, Zap, Play, Check, Layers
 } from 'lucide-react';
-import { listDatasets, getRecommendations, submitDecision, listDecisions, explainRecommendation, getScalingPreview } from '../api/client';
-import type { Recommendation, WorkflowDecision, ScalingPreviewData } from '../types';
+import {
+  listDatasets,
+  getRecommendations,
+  submitDecision,
+  listDecisions,
+  explainRecommendation,
+  getScalingPreview,
+  getTreatmentCandidates,
+  evaluateTreatmentCandidates,
+  applyTreatmentCandidate,
+} from '../api/client';
+import type {
+  Recommendation,
+  WorkflowDecision,
+  ScalingPreviewData,
+  TreatmentCandidate,
+  TreatmentValidationReport,
+} from '../types';
 
 const CATEGORY_LABELS: Record<string, string> = {
+  data_leakage: 'Data Leakage',
   missing_value: 'Missing Values',
   outlier: 'Outliers',
   encoding: 'Encoding',
@@ -18,6 +36,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
+  data_leakage: 'badge-danger',
   missing_value: 'badge-warning',
   outlier: 'badge-danger',
   encoding: 'badge-primary',
@@ -106,6 +125,14 @@ export function TreatmentPage() {
   const [selectedCol, setSelectedCol] = useState<string | null>(null);
   const [loadingScaling, setLoadingScaling] = useState(false);
 
+  // Candidate Treatment Strategies & Validation State
+  const [candidates, setCandidates] = useState<TreatmentCandidate[]>([]);
+  const [validationReport, setValidationReport] = useState<TreatmentValidationReport | null>(null);
+  const [evaluatingCandidates, setEvaluatingCandidates] = useState(false);
+  const [applyingCandidateId, setApplyingCandidateId] = useState<string | null>(null);
+  const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
+  const [candidateMessage, setCandidateMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const handleFetchScalingPreview = async () => {
     if (!projectId) return;
     setLoadingScaling(true);
@@ -153,24 +180,88 @@ export function TreatmentPage() {
     }
   };
 
-  useEffect(() => {
+  const handleEvaluateCandidates = async () => {
     if (!projectId) return;
-    (async () => {
-      const datasets = await listDatasets(projectId);
-      if (!datasets.length) { setLoading(false); return; }
-      const latest = datasets[datasets.length - 1];
-      const [r, d] = await Promise.all([
-        getRecommendations(latest.id),
-        listDecisions(projectId),
-      ]);
-      setRecs(r);
-      const decMap: Record<string, WorkflowDecision> = {};
-      d.forEach(dec => {
+    setEvaluatingCandidates(true);
+    setCandidateMessage(null);
+    try {
+      const report = await evaluateTreatmentCandidates(projectId);
+      setValidationReport(report);
+      // PENTING: Evaluasi CV hanyalah benchmark komparasi, BUKAN menerapkan keputusan.
+      // Jangan set activeCandidateId di sini agar tidak memicu kebingungan 'Active' semu.
+      setCandidateMessage({
+        type: 'success',
+        text: `Empirical 3-Fold CV selesai! Evaluasi menggunakan ${report.benchmark_model} (${report.task_type}). Pilih salah satu strategi di bawah lalu klik 'Terapkan Strategi Ini' untuk mengaktifkannya ke pipeline.`,
+      });
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || 'Gagal mengevaluasi kandidat strategi.';
+      setCandidateMessage({ type: 'error', text: msg });
+    } finally {
+      setEvaluatingCandidates(false);
+    }
+  };
+
+  const handleApplyCandidate = async (candidateId: string) => {
+    if (!projectId) return;
+    setApplyingCandidateId(candidateId);
+    setCandidateMessage(null);
+    try {
+      const res = await applyTreatmentCandidate(projectId, candidateId);
+      const decMap: Record<string, WorkflowDecision> = { ...decisions };
+      res.decisions.forEach(dec => {
         const key = `${dec.category}__${dec.column_name ?? 'dataset'}`;
         decMap[key] = dec;
       });
       setDecisions(decMap);
-      setLoading(false);
+      setOverrides({});
+      setActiveCandidateId(candidateId);
+      setCandidateMessage({
+        type: 'success',
+        text: `Berhasil menerapkan strategi (${res.applied_count} keputusan otomatis diperbarui)!`,
+      });
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || 'Gagal menerapkan strategi.';
+      setCandidateMessage({ type: 'error', text: msg });
+    } finally {
+      setApplyingCandidateId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!projectId) return;
+    (async () => {
+      try {
+        const datasets = await listDatasets(projectId);
+        if (!datasets.length) { setLoading(false); return; }
+        const latest = datasets[datasets.length - 1];
+        const [r, d, cand] = await Promise.all([
+          getRecommendations(latest.id),
+          listDecisions(projectId),
+          getTreatmentCandidates(projectId).catch(() => []),
+        ]);
+        setRecs(r);
+        setCandidates(cand);
+        const decMap: Record<string, WorkflowDecision> = {};
+        d.forEach(dec => {
+          const key = `${dec.category}__${dec.column_name ?? 'dataset'}`;
+          decMap[key] = dec;
+        });
+        setDecisions(decMap);
+
+        // Deteksi strategi yang sedang aktif dari histori database
+        const acceptedDecs = d.filter(dec => dec.status === 'accepted' || dec.status === 'overridden');
+        if (acceptedDecs.length > 0) {
+          if (acceptedDecs.some(dec => dec.rationale?.includes("Strategi Rekomendasi"))) {
+            setActiveCandidateId("recommended");
+          } else if (acceptedDecs.some(dec => dec.rationale?.includes("Strategi Baseline"))) {
+            setActiveCandidateId("baseline");
+          } else if (acceptedDecs.some(dec => dec.rationale?.includes("Strategi Alternatif"))) {
+            setActiveCandidateId("alternative");
+          }
+        }
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [projectId]);
 
@@ -210,12 +301,7 @@ export function TreatmentPage() {
   };
 
   const acceptAll = async () => {
-    for (const rec of recs) {
-      const key = decisionKey(rec);
-      if (!decisions[key]) {
-        await handleDecide(rec, rec.recommended_action, 'accepted');
-      }
-    }
+    await handleApplyCandidate('recommended');
   };
 
   const categories = ['all', ...Array.from(new Set(recs.map(r => r.category)))];
@@ -231,6 +317,19 @@ export function TreatmentPage() {
 
   const activeColData = selectedCol && scalingData ? scalingData[selectedCol] : null;
 
+  const handleBuildPipeline = async () => {
+    if (acceptedCount === 0) {
+      const proceed = window.confirm(
+        `Perhatian: Belum ada rekomendasi preprocessing yang disetujui (semua ${recs.length} issue masih berstatus Pending).\n\n` +
+        `Apakah Anda ingin menerapkan 'Strategi Rekomendasi' secara otomatis sekarang sebelum membangun pipeline?`
+      );
+      if (proceed) {
+        await handleApplyCandidate('recommended');
+      }
+    }
+    navigate(`/projects/${projectId}/pipeline`);
+  };
+
   return (
     <div className="animate-fade-in">
       <div className="page-header">
@@ -238,7 +337,9 @@ export function TreatmentPage() {
           <h1 className="page-title">Data Treatment</h1>
           <p className="page-subtitle">
             Review and approve preprocessing recommendations —&nbsp;
-            <strong style={{ color: 'var(--success)' }}>{acceptedCount}</strong> / {recs.length} decided
+            <strong style={{ color: acceptedCount > 0 ? 'var(--success)' : 'var(--warning)' }}>
+              {acceptedCount}
+            </strong> / {recs.length} decided
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -246,12 +347,12 @@ export function TreatmentPage() {
             <BarChart2 size={16} style={{ color: '#89b4fa' }} />
             {loadingScaling ? 'Loading Preview…' : 'Preview Scaling (Before vs After)'}
           </button>
-          <button className="btn btn-secondary" onClick={acceptAll}>
+          <button className="btn btn-secondary" onClick={acceptAll} disabled={applyingCandidateId !== null}>
             <CheckCircle2 size={16} /> Accept All Recommendations
           </button>
           <button
             className="btn btn-primary"
-            onClick={() => navigate(`/projects/${projectId}/pipeline`)}
+            onClick={handleBuildPipeline}
           >
             Build Pipeline <ChevronRight size={16} />
           </button>
@@ -271,6 +372,427 @@ export function TreatmentPage() {
             <div className="metric-value" style={{ fontSize: '1.75rem', color: s.color }}>{s.value}</div>
           </div>
         ))}
+      </div>
+
+      {/* ─── Macro Strategy Benchmark & Validation ─────────────────── */}
+      <div className="card" style={{ marginBottom: '1.75rem', padding: '1.5rem', position: 'relative' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
+              <Layers size={22} style={{ color: 'var(--accent)' }} />
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>
+                Candidate Preprocessing Strategies & Validation
+              </h2>
+              <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>
+                Empirical CV
+              </span>
+            </div>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '720px' }}>
+              Bandingkan pipeline preprocessing secara holistik melalui 3-Fold Cross-Validation menggunakan reference estimator (Logistic Regression / Ridge) sebelum melangkah ke training model skala penuh.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button
+              className="btn btn-primary"
+              onClick={handleEvaluateCandidates}
+              disabled={evaluatingCandidates}
+              style={{ fontWeight: 600 }}
+            >
+              {evaluatingCandidates ? (
+                <>
+                  <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                  Evaluating 3-Fold CV…
+                </>
+              ) : (
+                <>
+                  <Play size={15} />
+                  {validationReport ? 'Re-Evaluate Benchmark' : 'Evaluate Candidates (CV)'}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Notification Toast/Banner if any */}
+        {candidateMessage && (
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: '8px',
+              marginBottom: '1rem',
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: candidateMessage.type === 'success' ? 'var(--success-bg)' : 'var(--danger-bg)',
+              color: candidateMessage.type === 'success' ? 'var(--success)' : 'var(--danger)',
+              border: `1px solid ${candidateMessage.type === 'success' ? 'var(--success)' : 'var(--danger)'}`,
+            }}
+          >
+            <span>{candidateMessage.text}</span>
+            <button
+              onClick={() => setCandidateMessage(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0 }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* Empirical Validation Report Banner */}
+        {validationReport && (
+          <div
+            className="neu-inset"
+            style={{
+              padding: '1rem 1.25rem',
+              borderRadius: '12px',
+              marginBottom: '1.25rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                {validationReport.validation_status === 'SUPERIOR' && (
+                  <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}>
+                    <ShieldCheck size={14} /> PROXY: SUPERIOR
+                  </span>
+                )}
+                {validationReport.validation_status === 'INCONCLUSIVE' && (
+                  <span className="badge badge-info" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}>
+                    <Info size={14} /> PROXY: INCONCLUSIVE
+                  </span>
+                )}
+                {validationReport.validation_status === 'SUBOPTIMAL' && (
+                  <span className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}>
+                    <AlertCircle size={14} /> PROXY: SUBOPTIMAL
+                  </span>
+                )}
+                {validationReport.validation_status === 'INVALID_EVALUATION' && (
+                  <span className="badge badge-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}>
+                    <AlertCircle size={14} /> INVALID EVALUATION
+                  </span>
+                )}
+                <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+                  {validationReport.headline}
+                </span>
+              </div>
+
+              {/* Explicit Protocol Scope Badges (Requirement 10) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span className="badge badge-muted" style={{ fontSize: '0.74rem' }}>
+                  Evaluator: <strong>{validationReport.evaluation_metadata?.estimator || validationReport.benchmark_model}</strong>
+                </span>
+                <span className="badge badge-muted" style={{ fontSize: '0.74rem' }}>
+                  CV: <strong>{validationReport.evaluation_metadata?.cv_strategy ? `${validationReport.evaluation_metadata.cv_strategy} ${validationReport.evaluation_metadata.n_splits}-Fold` : 'Stratified 3-Fold'}</strong>
+                </span>
+                <span className="badge badge-muted" style={{ fontSize: '0.74rem' }}>
+                  Metric: <strong>{validationReport.primary_metric}</strong>
+                </span>
+                {validationReport.evaluation_metadata?.ci_method && (
+                  <span className="badge badge-muted" style={{ fontSize: '0.74rem' }}>
+                    Method: <strong>paired Student-t{validationReport.evaluation_metadata.degrees_of_freedom !== null && validationReport.evaluation_metadata.degrees_of_freedom !== undefined ? ` (df=${validationReport.evaluation_metadata.degrees_of_freedom})` : ''}</strong>
+                  </span>
+                )}
+                {validationReport.evaluation_metadata?.n_valid_folds !== undefined && (
+                  <span className="badge badge-muted" style={{ fontSize: '0.74rem' }}>
+                    Folds: <strong>{validationReport.evaluation_metadata.n_valid_folds} valid</strong>
+                  </span>
+                )}
+                {validationReport.ci_lower !== null && validationReport.ci_lower !== undefined && validationReport.ci_upper !== null && validationReport.ci_upper !== undefined && (
+                  <span
+                    className="badge badge-primary"
+                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', fontWeight: 600 }}
+                  >
+                    {validationReport.confidence_level ? (validationReport.confidence_level * 100).toFixed(0) : '90'}% CI: [{validationReport.ci_lower >= 0 ? '+' : ''}{validationReport.ci_lower.toFixed(4)}, {validationReport.ci_upper >= 0 ? '+' : ''}{validationReport.ci_upper.toFixed(4)}]
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0 0', lineHeight: 1.45 }}>
+              {validationReport.explanation}
+            </p>
+
+            {/* Auditable Fold Differences Section (Requirement 5 & 8) */}
+            {validationReport.fold_differences && validationReport.fold_differences.length > 0 && (
+              <div
+                style={{
+                  marginTop: '0.5rem',
+                  padding: '0.6rem 0.85rem',
+                  background: 'var(--bg-card)',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border)',
+                  fontSize: '0.75rem',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Auditable Paired Folds ({validationReport.primary_metric}):
+                  </span>
+                  <div style={{ display: 'flex', gap: '0.75rem', color: 'var(--text-muted)' }}>
+                    <span>Mean Diff: <strong>{validationReport.mean_difference !== null && validationReport.mean_difference !== undefined ? (validationReport.mean_difference >= 0 ? '+' : '') + validationReport.mean_difference.toFixed(4) : '-'} ({validationReport.relative_difference !== null && validationReport.relative_difference !== undefined ? (validationReport.relative_difference >= 0 ? '+' : '') + validationReport.relative_difference.toFixed(1) + '%' : '-'})</strong></span>
+                    {validationReport.sign_agreement && (
+                      <span>Sign Agreement: <strong>{validationReport.sign_agreement}</strong></span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {validationReport.fold_differences.map((diff, idx) => {
+                    const rec = validationReport.recommended_fold_scores?.[idx];
+                    const base = validationReport.baseline_fold_scores?.[idx];
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          padding: '0.25rem 0.55rem',
+                          background: 'var(--bg-app)',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        <span style={{ color: 'var(--text-muted)', marginRight: '0.25rem' }}>Fold {idx + 1}:</span>
+                        <span>Rec {rec !== undefined ? rec.toFixed(4) : '-'}</span>
+                        <span style={{ color: 'var(--text-muted)', margin: '0 0.2rem' }}>vs</span>
+                        <span>Base {base !== undefined ? base.toFixed(4) : '-'}</span>
+                        <span
+                          style={{
+                            marginLeft: '0.35rem',
+                            fontWeight: 700,
+                            color: diff > 0 ? 'var(--success)' : diff < 0 ? 'var(--danger)' : 'var(--text-muted)',
+                          }}
+                        >
+                          ({diff >= 0 ? '+' : ''}{diff.toFixed(4)})
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Banner Callout jika seluruh issue masih pending */}
+            {acceptedCount === 0 && (
+              <div
+                style={{
+                  marginTop: '0.85rem',
+                  padding: '0.75rem 1rem',
+                  background: 'rgba(217, 119, 6, 0.08)',
+                  border: '1px solid rgba(217, 119, 6, 0.3)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <AlertCircle size={16} style={{ color: 'var(--warning)', flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.825rem', color: 'var(--text-primary)' }}>
+                    <strong>{recs.length} issue masih berstatus Pending.</strong> Evaluasi di atas adalah simulasi benchmark. Klik tombol di kanan untuk menyetujui seluruh keputusan ke pipeline:
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() => handleApplyCandidate(validationReport.best_candidate_id)}
+                    disabled={applyingCandidateId !== null}
+                    style={{ fontSize: '0.78rem' }}
+                  >
+                    <Zap size={13} /> Terapkan Pemenang ({validationReport.best_candidate_id === 'recommended' ? 'Recommended' : validationReport.best_candidate_id === 'baseline' ? 'Raw Baseline' : 'Alternative'})
+                  </button>
+                  {validationReport.best_candidate_id !== 'recommended' && (
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => handleApplyCandidate('recommended')}
+                      disabled={applyingCandidateId !== null}
+                      style={{ fontSize: '0.78rem' }}
+                    >
+                      <CheckCircle2 size={13} /> Terapkan Rekomendasi
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Candidates 3-Column Grid */}
+        <div className="grid-3" style={{ gap: '1rem' }}>
+          {candidates.length === 0 ? (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              Memuat kandidat strategi preprocessing…
+            </div>
+          ) : (
+            candidates.map(cand => {
+              const evalItem = validationReport?.candidates.find(c => c.candidate_id === cand.candidate_id);
+              const isBest = validationReport?.best_candidate_id === cand.candidate_id;
+              const isRecommended = cand.strategy_type === 'recommended';
+              const isBaseline = cand.strategy_type === 'baseline';
+              const isAlternative = cand.strategy_type === 'alternative';
+              const isCurrentlyActive = activeCandidateId === cand.candidate_id && acceptedCount > 0;
+              const isApplyingThis = applyingCandidateId === cand.candidate_id;
+
+              return (
+                <div
+                  key={cand.candidate_id}
+                  style={{
+                    background: 'var(--bg-card)',
+                    border: isCurrentlyActive
+                      ? '2px solid var(--success)'
+                      : isBest
+                      ? '2px solid var(--accent)'
+                      : '1px solid var(--border)',
+                    borderRadius: '12px',
+                    padding: '1.25rem',
+                    boxShadow: isCurrentlyActive || isBest ? 'var(--neu-raised-hover)' : 'var(--neu-raised-sm)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    gap: '1rem',
+                    position: 'relative',
+                  }}
+                >
+                  <div>
+                    {/* Strategy Header Badge */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {isRecommended && (
+                          <span className="badge badge-primary" style={{ fontSize: '0.75rem' }}>
+                            <Award size={12} style={{ marginRight: '0.2rem' }} /> Recommended
+                          </span>
+                        )}
+                        {isBaseline && (
+                          <span className="badge badge-muted" style={{ fontSize: '0.75rem' }}>
+                            Raw Baseline
+                          </span>
+                        )}
+                        {isAlternative && (
+                          <span className="badge badge-warning" style={{ fontSize: '0.75rem' }}>
+                            Alternative
+                          </span>
+                        )}
+                        {isBest && (
+                          <span className="badge badge-success" style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                            <Award size={11} /> Skor Proksi Teratas (#1)
+                          </span>
+                        )}
+                      </div>
+
+                      {isCurrentlyActive && (
+                        <span className="badge badge-success" style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                          <Check size={11} /> Aktif di Pipeline
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Candidate Title & Description */}
+                    <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.35rem' }}>
+                      {cand.name}
+                    </h4>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.85rem', lineHeight: 1.4 }}>
+                      {cand.description}
+                    </p>
+
+                    {/* Benchmark Scores if Evaluated */}
+                    {evalItem ? (
+                      <div
+                        className="neu-inset"
+                        style={{
+                          padding: '0.75rem',
+                          borderRadius: '8px',
+                          marginBottom: '0.85rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            {evalItem.primary_metric_name} (3-Fold CV)
+                          </span>
+                          <span className={`badge ${evalItem.rank === 1 ? 'badge-success' : 'badge-muted'}`} style={{ fontSize: '0.68rem' }}>
+                            Rank #{evalItem.rank}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem' }}>
+                          <span style={{ fontSize: '1.35rem', fontWeight: 800, color: evalItem.rank === 1 ? 'var(--accent)' : 'var(--text-primary)' }}>
+                            {evalItem.primary_score.toFixed(4)}
+                          </span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            ± {evalItem.primary_std.toFixed(4)}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
+                          <span>{evalItem.secondary_metric_name}: <strong>{evalItem.secondary_score.toFixed(4)}</strong></span>
+                          <span>Time: <strong>{(evalItem.training_time_seconds * 1000).toFixed(0)}ms</strong></span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className="neu-inset"
+                        style={{
+                          padding: '0.65rem 0.75rem',
+                          borderRadius: '8px',
+                          marginBottom: '0.85rem',
+                          fontSize: '0.75rem',
+                          color: 'var(--text-muted)',
+                          fontStyle: 'italic',
+                        }}
+                      >
+                        Belum dievaluasi — Klik 'Evaluate Candidates' untuk menguji CV score.
+                      </div>
+                    )}
+
+                    {/* Summary Tags */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.5rem' }}>
+                      {cand.summary_tags.map(tag => (
+                        <span
+                          key={tag}
+                          style={{
+                            fontSize: '0.7rem',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '4px',
+                            padding: '0.15rem 0.45rem',
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Action Button */}
+                  <button
+                    className={`btn btn-sm ${isCurrentlyActive ? 'btn-secondary' : isBest ? 'btn-primary' : isRecommended ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => handleApplyCandidate(cand.candidate_id)}
+                    disabled={isApplyingThis}
+                    style={{ width: '100%', justifyContent: 'center' }}
+                  >
+                    {isApplyingThis ? (
+                      <>
+                        <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+                        Menerapkan…
+                      </>
+                    ) : isCurrentlyActive ? (
+                      <>
+                        <Check size={14} style={{ color: 'var(--success)' }} />
+                        ✓ Sedang Aktif di Pipeline
+                      </>
+                    ) : (
+                      <>
+                        <Zap size={13} />
+                        Terapkan Strategi Ini (1-Click)
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* Category filter */}

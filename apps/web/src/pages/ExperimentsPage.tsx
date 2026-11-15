@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { FlaskConical, Play, CheckCircle2, XCircle, Clock, Trophy, Bot, Sliders, Zap, Sparkles } from 'lucide-react';
+import { FlaskConical, Play, CheckCircle2, XCircle, Clock, Trophy, Sliders, Zap, Sparkles, Search, X } from 'lucide-react';
 import { listExperiments, runExperiments, getAvailableModels, selectCandidate, getExperimentSummary, tuneHyperparameters, getProject } from '../api/client';
 import type { Experiment, TuningResultData } from '../types';
 
@@ -26,6 +26,10 @@ const MODEL_DISPLAY: Record<string, string> = {
   knn_regressor: 'KNN Regressor',
   xgb_regressor: 'XGBoost Regressor',
   lgbm_regressor: 'LightGBM Regressor',
+  // Sentiment Analysis & NLP
+  multinomial_nb: 'Multinomial Naive Bayes',
+  complement_nb: 'Complement Naive Bayes',
+  sgd_classifier: 'SGD Classifier',
 };
 
 const STATUS_ICON = {
@@ -38,6 +42,21 @@ const STATUS_ICON = {
 function getMetric(exp: Experiment, name: string): number | null {
   const m = exp.metrics.find(m => m.name === name && m.split === 'cv');
   return m ? m.value : null;
+}
+
+function renderMarkdownBold(text?: string) {
+  if (!text) return null;
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={i} style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
 }
 
 export function ExperimentsPage() {
@@ -56,6 +75,8 @@ export function ExperimentsPage() {
   const [selectingCandidate, setSelectingCandidate] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [aiSummary, setAiSummary] = useState<Record<string, any> | null>(null);
+  const [experimentName, setExperimentName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // State Hyperparameter Tuning
   const [showTuneModal, setShowTuneModal] = useState(false);
@@ -68,20 +89,20 @@ export function ExperimentsPage() {
     if (!projectId) return;
     setLoading(true);
     getProject(projectId).then(proj => {
-      const isReg = proj.task_type === 'regression';
-      setTaskType(proj.task_type);
-      setPrimaryMetric(isReg ? 'r2_mean' : 'f1_mean');
+      if (proj.task_type) {
+        setTaskType(proj.task_type);
+        setPrimaryMetric(proj.task_type === 'regression' ? 'r2_mean' : 'f1_mean');
+      }
       return Promise.all([
         listExperiments(projectId),
-        getAvailableModels(proj.task_type),
+        getAvailableModels(proj.task_type || 'classification'),
         getExperimentSummary(projectId).catch(() => null),
-      ]).then(([exps, models, summary]) => {
-        setExperiments(exps);
-        setAvailableModels(models);
-        setSelectedModels(models.slice(0, 3));
-        setTuneModel(models[0] ?? (isReg ? 'random_forest_regressor' : 'random_forest'));
-        if (summary) setAiSummary(summary as Record<string, any>);
-      });
+      ]);
+    }).then(([exps, models, summary]) => {
+      setExperiments(exps);
+      setAvailableModels(models);
+      setSelectedModels(models.slice(0, 3));
+      if (summary) setAiSummary(summary as Record<string, any>);
     }).finally(() => setLoading(false));
   }, [projectId]);
 
@@ -135,6 +156,7 @@ export function ExperimentsPage() {
     try {
       const newExps = await runExperiments(projectId, {
         model_names: selectedModels,
+        experiment_name: experimentName.trim() || undefined,
         random_seed: seed,
         cv_folds: cvFolds,
         primary_metric: primaryMetric.replace('_mean', ''),
@@ -186,6 +208,7 @@ export function ExperimentsPage() {
     try {
       const newExps = await runExperiments(projectId, {
         model_names: [tuneModel],
+        experiment_name: `Tuned: ${MODEL_DISPLAY[tuneModel] ?? tuneModel}`,
         random_seed: seed,
         cv_folds: cvFolds,
         primary_metric: primaryMetric.replace('_mean', ''),
@@ -204,21 +227,38 @@ export function ExperimentsPage() {
   };
 
 
-  // Build comparison chart data
+  // Build comparison chart data with model + experiment name disambiguation
   const metricForChart = primaryMetric;
   const isRegression = taskType === 'regression';
 
   const chartData = experiments
     .filter(e => e.status === 'completed')
-    .map(e => ({
-      model: MODEL_DISPLAY[e.model_name] ?? e.model_name,
-      model_name: e.model_name,
-      mean: getMetric(e, metricForChart) ?? 0,
-      std: getMetric(e, metricForChart.replace('_mean', '_std')) ?? 0,
-    }))
+    .map(e => {
+      const expName = e.experiment_name || (e.config_json?.experiment_name as string);
+      const baseName = MODEL_DISPLAY[e.model_name] ?? e.model_name;
+      const label = expName ? `${baseName} (${expName})` : baseName;
+      return {
+        id: e.id,
+        model: label,
+        model_name: e.model_name,
+        mean: getMetric(e, metricForChart) ?? 0,
+        std: getMetric(e, metricForChart.replace('_mean', '_std')) ?? 0,
+      };
+    })
     .sort((a, b) => isRegression ? b.mean - a.mean : b.mean - a.mean);
 
   const best = chartData[0];
+
+  // Filtered experiments for search query
+  const filteredExperiments = experiments.filter(exp => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    const modelDisplayName = (MODEL_DISPLAY[exp.model_name] ?? exp.model_name).toLowerCase();
+    const rawModel = exp.model_name.toLowerCase();
+    const expName = ((exp.experiment_name || (exp.config_json?.experiment_name as string)) ?? '').toLowerCase();
+    const status = exp.status.toLowerCase();
+    return modelDisplayName.includes(q) || rawModel.includes(q) || expName.includes(q) || status.includes(q);
+  });
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', flexDirection: 'column', gap: '1rem' }}>
@@ -309,6 +349,24 @@ export function ExperimentsPage() {
             />
           </div>
 
+          <div className="form-group" style={{ marginBottom: '1rem' }}>
+            <label className="label" htmlFor="exp-name-input">
+              Experiment / Pipeline Name (Opsional)
+            </label>
+            <input
+              id="exp-name-input"
+              className="input"
+              type="text"
+              placeholder="Misal: Pipeline Treatment Rekomendasi, Outlier Capped, dsb."
+              value={experimentName}
+              onChange={e => setExperimentName(e.target.value)}
+              style={{ width: '100%' }}
+            />
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+              Beri label pipeline ini agar tidak membingungkan saat menguji algoritma model yang sama dengan perlakuan berbeda.
+            </span>
+          </div>
+
           <div className="form-group" style={{ marginBottom: '1.25rem' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', color: '#cdd6f4' }}>
               <input
@@ -383,10 +441,10 @@ export function ExperimentsPage() {
               </div>
               <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                 <span className="badge badge-success">
-                  {isRegression && !primaryMetric.includes('r2') ? best.mean.toFixed(4) : `${(best.mean * 100).toFixed(2)}%`}
+                  {isRegression ? best.mean.toFixed(4) : `${(best.mean * 100).toFixed(2)}%`}
                 </span>
                 <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                  ± {isRegression && !primaryMetric.includes('r2') ? best.std.toFixed(4) : `${(best.std * 100).toFixed(2)}%`} (CV std)
+                  ± {isRegression ? best.std.toFixed(4) : `${(best.std * 100).toFixed(2)}%`} (CV std)
                 </span>
               </div>
             </div>
@@ -397,22 +455,98 @@ export function ExperimentsPage() {
         {aiSummary && (
           <div className="card" style={{
             gridColumn: '1 / -1',
-            background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.05))',
-            border: '1px solid rgba(99,102,241,0.3)',
-            padding: '1.25rem 1.5rem',
+            border: '1px solid var(--border-highlight)',
+            padding: '1.5rem',
+            boxShadow: 'var(--neu-raised)',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
-              <Bot size={20} style={{ color: '#cba6f7' }} />
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: '#cdd6f4' }}>
-                AI Benchmark Summary
-              </h3>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'rgba(67, 56, 202, 0.12)',
+                  border: '1px solid rgba(67, 56, 202, 0.25)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--accent)',
+                  flexShrink: 0,
+                }}>
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--accent)' }}>
+                    AI Benchmark Summary
+                  </div>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                    {aiSummary.headline}
+                  </h3>
+                </div>
+              </div>
+
+              {aiSummary.best_model_name && (
+                <span className="badge badge-primary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>
+                  <Trophy size={13} style={{ marginRight: '0.25rem' }} /> Rekomendasi Utama
+                </span>
+              )}
             </div>
-            <div style={{ fontSize: '0.92rem', fontWeight: 600, color: '#cba6f7', marginBottom: '0.5rem' }}>
-              {aiSummary.headline}
+
+            {/* Narrative Box */}
+            <div style={{
+              fontSize: '0.88rem',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.65,
+              padding: '1rem 1.25rem',
+              background: 'var(--bg-inset)',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border-inset)',
+              marginBottom: '1rem',
+            }}>
+              {renderMarkdownBold(aiSummary.narrative)}
             </div>
-            <p style={{ fontSize: '0.85rem', color: '#a6adc8', lineHeight: 1.5, marginBottom: '0.75rem' }}>
-              {aiSummary.narrative}
-            </p>
+
+            {/* Strengths & Takeaways Grid */}
+            {((aiSummary.strengths && aiSummary.strengths.length > 0) || (aiSummary.takeaways && aiSummary.takeaways.length > 0)) && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+                {aiSummary.strengths && aiSummary.strengths.length > 0 && (
+                  <div style={{
+                    background: 'rgba(5, 150, 105, 0.06)',
+                    border: '1px solid rgba(5, 150, 105, 0.25)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.85rem 1rem',
+                  }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--success)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <CheckCircle2 size={13} /> Bukti Performa Model
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                      {aiSummary.strengths.map((str: string, idx: number) => (
+                        <li key={idx} style={{ marginBottom: '0.25rem' }}>{str}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {aiSummary.takeaways && aiSummary.takeaways.length > 0 && (
+                  <div style={{
+                    background: 'rgba(67, 56, 202, 0.06)',
+                    border: '1px solid rgba(67, 56, 202, 0.25)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.85rem 1rem',
+                  }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Clock size={13} /> Status & Rekomendasi Langkah
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                      {aiSummary.takeaways.map((tak: string, idx: number) => (
+                        <li key={idx} style={{ marginBottom: '0.25rem' }}>{tak}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -605,13 +739,45 @@ export function ExperimentsPage() {
       {/* Experiments table */}
       {experiments.length > 0 && (
         <div className="card">
-          <h3 style={{ marginBottom: '1rem' }}>All Experiments</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <h3 style={{ margin: 0 }}>All Experiments</h3>
+              <span className="badge badge-secondary" style={{ fontSize: '0.75rem' }}>
+                {filteredExperiments.length} {filteredExperiments.length === experiments.length ? 'runs' : `dari ${experiments.length} runs`}
+              </span>
+            </div>
+
+            {/* Fitur Search Experiment Name / Algorithm */}
+            <div style={{ position: 'relative', minWidth: 280 }}>
+              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                id="search-experiments-input"
+                type="text"
+                className="input"
+                placeholder="Cari algoritma, nama eksperimen, status..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{ paddingLeft: '2rem', paddingRight: searchQuery ? '2rem' : '0.75rem', width: '100%', fontSize: '0.82rem', height: 34 }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+                  title="Bersihkan pencarian"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>Status</th>
-                  <th>Model</th>
+                  <th>Model &amp; Pipeline / Experiment</th>
                   <th>{isRegression ? 'R² CV (mean±std)' : 'F1 CV (mean±std)'}</th>
                   <th>{isRegression ? 'MAE' : 'Accuracy'}</th>
                   <th>{isRegression ? 'RMSE' : 'ROC-AUC'}</th>
@@ -621,102 +787,133 @@ export function ExperimentsPage() {
                 </tr>
               </thead>
               <tbody>
-                {experiments.map((exp) => {
+                {filteredExperiments.length === 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-muted)' }}>
+                      Tidak ada eksperimen yang cocok dengan pencarian "{searchQuery}".
+                    </td>
+                  </tr>
+                )}
+                {filteredExperiments.map((exp) => {
                   const m1 = getMetric(exp, isRegression ? 'r2_mean' : 'f1_mean');
                   const m1std = getMetric(exp, isRegression ? 'r2_std' : 'f1_std');
                   const m2 = getMetric(exp, isRegression ? 'mae_mean' : 'accuracy_mean');
                   const m3 = getMetric(exp, isRegression ? 'rmse_mean' : 'roc_auc_mean');
-                  const isBest = chartData[0]?.model === (MODEL_DISPLAY[exp.model_name] ?? exp.model_name);
+                  const isBest = chartData[0]?.id === exp.id;
+                  const expTag = exp.experiment_name || (exp.config_json?.experiment_name as string) || '';
                   const errorMsg = exp.error_message ?? '';
                   const errorShort = errorMsg.length > 80 ? errorMsg.slice(0, 80) + '\u2026' : errorMsg;
                   return (
-                    <>
-                    <tr key={exp.id} style={{
-                      ...(isBest && exp.status === 'completed' ? { background: 'rgba(16,185,129,0.05)' } : {}),
-                      ...(exp.status === 'failed' ? { opacity: 0.8 } : {}),
-                    }}>
-                      <td>{STATUS_ICON[exp.status as keyof typeof STATUS_ICON] ?? exp.status}</td>
-                      <td style={{ fontWeight: 500 }}>
-                        {MODEL_DISPLAY[exp.model_name] ?? exp.model_name}
-                        {(exp.config_json?.is_tuned === true || exp.model_name.endsWith('_tune')) && (
-                          <span className="badge badge-info" style={{ marginLeft: '0.375rem', fontSize: '0.7rem', padding: '0.1rem 0.35rem' }}>Tuned</span>
-                        )}
-                        {isBest && exp.status === 'completed' && (
-                          <Trophy size={12} color="var(--warning)" style={{ marginLeft: '0.375rem' }} />
-                        )}
-                      </td>
-                      <td style={{ fontFamily: 'monospace' }}>
-                        {m1 !== null ? (
-                          <>
-                            <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{isRegression ? m1.toFixed(4) : `${(m1 * 100).toFixed(2)}%`}</span>
-                            {m1std !== null && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}> ±{isRegression ? m1std.toFixed(4) : `${(m1std * 100).toFixed(2)}%`}</span>}
-                          </>
-                        ) : exp.status === 'failed' ? (
-                          <span
-                            className="badge badge-danger"
-                            title={errorMsg}
-                            style={{ cursor: 'help', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                          >
-                            Error
-                          </span>
-                        ) : '\u2014'}
-                      </td>
-                      <td style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                        {m2 !== null ? (isRegression ? m2.toFixed(4) : `${(m2 * 100).toFixed(2)}%`) : '—'}
-                      </td>
-                      <td style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                        {m3 !== null ? (isRegression ? m3.toFixed(4) : `${(m3 * 100).toFixed(2)}%`) : '—'}
-                      </td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                        {exp.training_time_seconds ? `${exp.training_time_seconds.toFixed(1)}s` : '—'}
-                      </td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontFamily: 'monospace' }}>
-                        {exp.random_seed}
-                      </td>
-                      <td>
-                        {exp.status === 'completed' && (
-                          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                            <button
-                              className="btn btn-sm btn-secondary"
-                              style={{ border: '1px solid rgba(137, 180, 250, 0.4)', color: '#89b4fa', fontSize: '0.78rem', padding: '0.25rem 0.6rem', gap: '0.25rem' }}
-                              onClick={() => handleOpenTuneModal(exp.model_name)}
-                              title="Tune hyperparameters to boost accuracy for this model"
-                            >
-                              <Sliders size={12} /> Tune
-                            </button>
-                            <button
-                              className="btn btn-sm btn-primary"
-                              style={{ gap: '0.35rem', whiteSpace: 'nowrap', padding: '0.25rem 0.6rem' }}
-                              disabled={selectingCandidate === exp.id}
-                              onClick={() => handleSelectCandidate(exp.id)}
-                            >
-                              {selectingCandidate === exp.id ? (
-                                <span className="spinner" />
-                              ) : (
-                                <>
-                                  <Trophy size={11} /> Candidate
-                                </>
+                    <Fragment key={exp.id}>
+                      <tr style={{
+                        ...(isBest && exp.status === 'completed' ? { background: 'rgba(16,185,129,0.05)' } : {}),
+                        ...(exp.status === 'failed' ? { opacity: 0.8 } : {}),
+                      }}>
+                        <td>{STATUS_ICON[exp.status as keyof typeof STATUS_ICON] ?? exp.status}</td>
+                        <td style={{ fontWeight: 500 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                              <span style={{ color: 'var(--text-primary)' }}>{MODEL_DISPLAY[exp.model_name] ?? exp.model_name}</span>
+                              {(exp.config_json?.is_tuned === true || exp.model_name.endsWith('_tune')) && (
+                                <span className="badge badge-info" style={{ fontSize: '0.68rem', padding: '0.08rem 0.35rem' }}>Tuned</span>
                               )}
-                            </button>
+                              {isBest && exp.status === 'completed' && (
+                                <Trophy size={12} color="var(--warning)" />
+                              )}
+                            </div>
+                            {/* Output Nama Algoritma + Experiment Name */}
+                            {expTag && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <span
+                                  className="badge badge-primary"
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    padding: '0.1rem 0.45rem',
+                                    fontWeight: 600,
+                                    letterSpacing: '0.01em',
+                                    background: 'rgba(67, 56, 202, 0.18)',
+                                    color: '#818cf8',
+                                    border: '1px solid rgba(129, 140, 248, 0.3)',
+                                  }}
+                                >
+                                  🏷️ {expTag}
+                                </span>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </td>
-                    </tr>
-                    {exp.status === 'failed' && errorMsg && (
-                      <tr key={`${exp.id}-err`} style={{ background: 'rgba(239,68,68,0.04)' }}>
-                        <td />
-                        <td colSpan={7} style={{
-                          fontSize: '0.75rem',
-                          color: 'var(--danger)',
-                          padding: '0.35rem 0.75rem 0.6rem',
-                          fontFamily: 'monospace',
-                          lineHeight: 1.4,
-                        }}>
-                          {errorShort}
+                        </td>
+                        <td style={{ fontFamily: 'monospace' }}>
+                          {m1 !== null ? (
+                            <>
+                              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{isRegression ? m1.toFixed(4) : `${(m1 * 100).toFixed(2)}%`}</span>
+                              {m1std !== null && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}> ±{isRegression ? m1std.toFixed(4) : `${(m1std * 100).toFixed(2)}%`}</span>}
+                            </>
+                          ) : exp.status === 'failed' ? (
+                            <span
+                              className="badge badge-danger"
+                              title={errorMsg}
+                              style={{ cursor: 'help', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            >
+                              Error
+                            </span>
+                          ) : '\u2014'}
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                          {m2 !== null ? (isRegression ? m2.toFixed(4) : `${(m2 * 100).toFixed(2)}%`) : '—'}
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                          {m3 !== null ? (isRegression ? m3.toFixed(4) : `${(m3 * 100).toFixed(2)}%`) : '—'}
+                        </td>
+                        <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                          {exp.training_time_seconds ? `${exp.training_time_seconds.toFixed(1)}s` : '—'}
+                        </td>
+                        <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontFamily: 'monospace' }}>
+                          {exp.random_seed}
+                        </td>
+                        <td>
+                          {exp.status === 'completed' && (
+                            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                style={{ border: '1px solid rgba(137, 180, 250, 0.4)', color: '#89b4fa', fontSize: '0.78rem', padding: '0.25rem 0.6rem', gap: '0.25rem' }}
+                                onClick={() => handleOpenTuneModal(exp.model_name)}
+                                title="Tune hyperparameters to boost accuracy for this model"
+                              >
+                                <Sliders size={12} /> Tune
+                              </button>
+                              <button
+                                className="btn btn-sm btn-primary"
+                                style={{ gap: '0.35rem', whiteSpace: 'nowrap', padding: '0.25rem 0.6rem' }}
+                                disabled={selectingCandidate === exp.id}
+                                onClick={() => handleSelectCandidate(exp.id)}
+                              >
+                                {selectingCandidate === exp.id ? (
+                                  <span className="spinner" />
+                                ) : (
+                                  <>
+                                    <Trophy size={11} /> Candidate
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
-                    )}
-                    </>
+                      {exp.status === 'failed' && errorMsg && (
+                        <tr key={`${exp.id}-err`} style={{ background: 'rgba(239,68,68,0.04)' }}>
+                          <td />
+                          <td colSpan={7} style={{
+                            fontSize: '0.75rem',
+                            color: 'var(--danger)',
+                            padding: '0.35rem 0.75rem 0.6rem',
+                            fontFamily: 'monospace',
+                            lineHeight: 1.4,
+                          }}>
+                            {errorShort}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
